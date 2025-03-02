@@ -1,19 +1,16 @@
-const puppeteer = require('puppeteer');
-const readline = require('readline');
-const fs = require('fs').promises;
+// Main application for Bumble automation
 const path = require('path');
+const fs = require('fs').promises;
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-function question(query) {
-  return new Promise(resolve => rl.question(query, resolve));
-}
+// Import modules
+const { delay, question, rl, simulateProfileCheck, ensureDirectoryExists, clickAtPosition } = require('./lib/utils');
+const { initBrowser, checkLoginStatus, waitForLogin, closeBrowser } = require('./lib/browser');
+const { findActionButtons, testButtons, handleMatchNotification } = require('./lib/ui-detection');
+const { isProfilePhotoVerified } = require('./lib/profile-verification');
+const { processProfile } = require('./lib/swipe-logic');
+const { setupSignalHandlers } = require('./lib/cleanup');
 
 // Variables to track resources that need cleanup
-let screenshotPath = null;
 let browser = null;
 
 // Cleanup function to delete screenshot and close resources
@@ -28,22 +25,10 @@ async function cleanup() {
     // Close browser if open
     if (browser) {
         try {
-            await browser.close();
+            await closeBrowser();
             console.log('Browser closed.');
         } catch (err) {
             // Browser might already be closed
-        }
-    }
-    
-    // Delete screenshot if it exists
-    if (screenshotPath) {
-        try {
-            await fs.access(screenshotPath);
-            await fs.unlink(screenshotPath);
-            console.log('Screenshot deleted.');
-        } catch (err) {
-            // File might not exist or can't be accessed
-            console.log('Could not delete screenshot:', err.message);
         }
     }
     
@@ -52,53 +37,22 @@ async function cleanup() {
 
 (async () => {
     try {
-        // Create user data directory if it doesn't exist
-        const userDataDir = path.join(process.cwd(), 'user_data');
-        try {
-            await fs.mkdir(userDataDir, { recursive: true });
-            console.log(`User data directory created/verified at: ${userDataDir}`);
-        } catch (err) {
-            console.log('Error creating user data directory:', err.message);
-        }
+        // Create screenshots directory
+        const screenshotDir = path.join(process.cwd(), 'screenshots');
+        await ensureDirectoryExists(screenshotDir);
         
-        console.log('Launching browser...');
-        browser = await puppeteer.launch({ 
-            headless: false, 
-            defaultViewport: null,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            userDataDir: './user_data'
-        });
+        // Initialize the browser
+        console.log('Initializing browser...');
+        const result = await initBrowser();
+        browser = result.browser;
+        const page = result.page;
         
-        console.log('Opening new page...');
-        const page = await browser.newPage();
+        // Set up signal handlers for graceful shutdown
+        setupSignalHandlers(browser, closeBrowser);
         
-        // Set up exit handler
-        console.log('Press Ctrl+C to exit at any time');
-        process.on('SIGINT', async () => {
-            console.log('\nReceived termination signal.');
-            await cleanup();
-            process.exit(0);
-        });
-        
-        console.log('Navigating to Bumble...');
-        await page.goto('https://bumble.com/app', { waitUntil: 'networkidle2' });
-        console.log('Page loaded!');
-
         // Check if we're already logged in
         console.log('Checking authentication status...');
-        const isLoggedIn = await page.evaluate(() => {
-            // Check for elements that would indicate we're in the app
-            const swipeButtons = document.querySelector('[data-qa-role="encounters-action-like"]') ||
-                document.querySelector('[data-qa-role="encounters-action-dislike"]');
-            
-            // Check for elements that would indicate we're on the login page
-            const loginElements = document.querySelector('[data-qa-role="google-login"]') ||
-                document.querySelector('[data-qa-role="facebook-login"]') ||
-                document.querySelector('[data-qa-role="phone-login"]');
-                
-            // Return true if we find app elements and no login elements
-            return !!swipeButtons || !loginElements;
-        });
+        const isLoggedIn = await checkLoginStatus(page);
         
         if (isLoggedIn) {
             console.log('✅ Already logged in! Session was successfully restored.');
@@ -106,296 +60,30 @@ async function cleanup() {
             console.log('⚠️ Not logged in. Please log into Bumble when the browser opens.');
             console.log('Your login will be remembered for future sessions.');
             
-            // Wait for login to complete and navigation to the app
-            console.log('Waiting for successful login and navigation to the app...');
-            await page.waitForSelector('[data-qa-role="encounters-action-like"], [aria-label="Like"], .profile-header', { 
-                timeout: 300000 // 5 minutes timeout for login
-            }).catch(() => {
-                console.log('Login timeout - please manually navigate to the swiping interface when logged in.');
-            });
-            
-            console.log('Login detected or timeout reached!');
-        }
-
-        // Helper function for delays
-        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-        // Function to simulate key presses
-        async function simulateProfileCheck(page) {
-            console.log('Checking profile...');
-            const keyPresses = Math.floor(Math.random() * 9); // Random 0-8 times
-            for (let i = 0; i < keyPresses; i++) {
-                await page.keyboard.press('ArrowDown');
-                await delay(Math.random() * 500 + 200); // Random delay
-            }
-            for (let i = 0; i < keyPresses; i++) {
-                await page.keyboard.press('ArrowUp');
-                await delay(Math.random() * 500 + 200);
-            }
+            // Wait for login to complete
+            await waitForLogin(page);
         }
 
         console.log('\n==== AUTOMATIC BUTTON DETECTION ====');
-        console.log('Please log into Bumble and navigate to the swiping interface.');
+        console.log('Please navigate to the swiping interface if not already there.');
         
         await question('Press Enter when you are ready and have a profile visible...');
         
-        // Take a screenshot for reference
-        console.log('Taking screenshot for reference...');
-        
-        const screenshotDir = path.join(process.cwd(), 'screenshots');
-        try {
-            await fs.mkdir(screenshotDir, { recursive: true });
-        } catch (err) {
-            // Directory already exists, ignore
-        }
-        
-        screenshotPath = path.join(screenshotDir, 'bumble_screen.png');
-        await page.screenshot({ path: screenshotPath, fullPage: false });
-        console.log(`Screenshot saved to: ${screenshotPath}`);
-        
-        // Find buttons using data-qa-role attributes
-        console.log('Finding buttons by data-qa-role attributes...');
-        
-        let likePos = null;
-        let passPos = null;
-        
-        // Try to find buttons using the provided data-qa-role attributes
-        const buttonsFound = await page.evaluate(() => {
-            // Look for the exact attributes the user provided
-            const likeButton = document.querySelector('[data-qa-role="encounters-action-like"]');
-            const dislikeButton = document.querySelector('[data-qa-role="encounters-action-dislike"]');
-            
-            // If not found with exact attributes, try other possible selectors
-            const likeButtonAlt = likeButton || 
-                document.querySelector('[aria-label="Like"]') || 
-                document.querySelector('[class*="like-button"]') ||
-                document.querySelector('[class*="likeButton"]');
-                
-            const dislikeButtonAlt = dislikeButton || 
-                document.querySelector('[aria-label="Pass"]') || 
-                document.querySelector('[class*="dislike-button"]') ||
-                document.querySelector('[class*="passButton"]');
-            
-            const result = {
-                found: false,
-                like: null,
-                pass: null
-            };
-            
-            // Get position of buttons if found
-            if (likeButtonAlt) {
-                const likeRect = likeButtonAlt.getBoundingClientRect();
-                result.like = {
-                    x: Math.round(likeRect.left + likeRect.width / 2),
-                    y: Math.round(likeRect.top + likeRect.height / 2),
-                    found: true,
-                    selector: likeButton ? 'data-qa-role="encounters-action-like"' : 'alternative selector'
-                };
-            }
-            
-            if (dislikeButtonAlt) {
-                const dislikeRect = dislikeButtonAlt.getBoundingClientRect();
-                result.pass = {
-                    x: Math.round(dislikeRect.left + dislikeRect.width / 2),
-                    y: Math.round(dislikeRect.top + dislikeRect.height / 2),
-                    found: true,
-                    selector: dislikeButton ? 'data-qa-role="encounters-action-dislike"' : 'alternative selector'
-                };
-            }
-            
-            result.found = (result.like && result.like.found) || (result.pass && result.pass.found);
-            
-            return result;
-        });
-        
-        // If buttons were found, use their coordinates
-        if (buttonsFound.found) {
-            if (buttonsFound.like && buttonsFound.like.found) {
-                likePos = { x: buttonsFound.like.x, y: buttonsFound.like.y };
-                console.log(`✅ Found LIKE button at (${likePos.x}, ${likePos.y}) using ${buttonsFound.like.selector}`);
-            } else {
-                console.log('❌ Could not find LIKE button automatically.');
-            }
-            
-            if (buttonsFound.pass && buttonsFound.pass.found) {
-                passPos = { x: buttonsFound.pass.x, y: buttonsFound.pass.y };
-                console.log(`✅ Found PASS button at (${passPos.x}, ${passPos.y}) using ${buttonsFound.pass.selector}`);
-            } else {
-                console.log('❌ Could not find PASS button automatically.');
-            }
-        } else {
-            console.log('❌ Could not find buttons automatically using data-qa-role attributes.');
-        }
-        
-        // If any button wasn't found, fall back to manual entry or suggested positions
-        if (!likePos || !passPos) {
-            console.log('\nFalling back to manual coordinate entry...');
-            
-            // Get viewport dimensions for intelligent suggestions
-            const dimensions = await page.evaluate(() => {
-                return {
-                    width: window.innerWidth,
-                    height: window.innerHeight
-                };
-            });
-            
-            console.log(`Your browser window size is: ${dimensions.width} x ${dimensions.height}`);
-            
-            // Suggest positions based on screen dimensions if needed
-            if (!likePos) {
-                const suggestedLikeX = Math.round(dimensions.width * 0.75); // Right side
-                const suggestedLikeY = Math.round(dimensions.height * 0.85); // Bottom area
-                
-                console.log(`Suggested LIKE button position: (${suggestedLikeX}, ${suggestedLikeY})`);
-                const likeX = await question('Enter X coordinate for LIKE button: ');
-                const likeY = await question('Enter Y coordinate for LIKE button: ');
-                
-                likePos = { x: parseInt(likeX) || suggestedLikeX, y: parseInt(likeY) || suggestedLikeY };
-            }
-            
-            if (!passPos) {
-                const suggestedPassX = Math.round(dimensions.width * 0.25); // Left side
-                const suggestedPassY = Math.round(dimensions.height * 0.85); // Bottom area
-                
-                console.log(`Suggested PASS button position: (${suggestedPassX}, ${suggestedPassY})`);
-                const passX = await question('Enter X coordinate for PASS button: ');
-                const passY = await question('Enter Y coordinate for PASS button: ');
-                
-                passPos = { x: parseInt(passX) || suggestedPassX, y: parseInt(passY) || suggestedPassY };
-            }
-        }
-        
-        console.log(`\nFinal button positions:`);
-        console.log(`LIKE button: (${likePos.x}, ${likePos.y})`);
-        console.log(`PASS button: (${passPos.x}, ${passPos.y})`);
+        // Find the action buttons
+        const { buttonPositions, screenshotPath } = await findActionButtons(page, screenshotDir);
         
         // Allow user to test the button positions
         console.log('\n==== BUTTON TEST ====');
         const shouldTest = await question('Do you want to test the button positions? (y/n): ');
         
         if (shouldTest.toLowerCase() === 'y') {
-            console.log('Testing LIKE button...');
-            await page.mouse.click(likePos.x, likePos.y);
-            await delay(2000);
-            
-            const likeWorked = await question('Did the LIKE button work correctly? (y/n): ');
-            
-            if (likeWorked.toLowerCase() !== 'y') {
-                const newLikeX = await question('Enter new X coordinate for LIKE button: ');
-                const newLikeY = await question('Enter new Y coordinate for LIKE button: ');
-                likePos = { x: parseInt(newLikeX), y: parseInt(newLikeY) };
-            }
-            
-            console.log('Testing PASS button...');
-            await page.mouse.click(passPos.x, passPos.y);
-            await delay(2000);
-            
-            const passWorked = await question('Did the PASS button work correctly? (y/n): ');
-            
-            if (passWorked.toLowerCase() !== 'y') {
-                const newPassX = await question('Enter new X coordinate for PASS button: ');
-                const newPassY = await question('Enter new Y coordinate for PASS button: ');
-                passPos = { x: parseInt(newPassX), y: parseInt(newPassY) };
-            }
-        }
-        
-        // Function to click at specific coordinates
-        async function clickAtPosition(page, x, y) {
-            await page.mouse.click(x, y, { delay: Math.random() * 100 + 50 });
-        }
-        
-        // Function to check if profile is photo verified
-        async function isProfilePhotoVerified(page) {
-            console.log('Checking if profile is photo verified...');
-            
-            try {
-                // First, take a screenshot for debugging
-                const verificationScreenshotPath = path.join(screenshotDir, 'verification_check.png');
-                await page.screenshot({ path: verificationScreenshotPath });
-                console.log(`Verification screenshot saved to: ${verificationScreenshotPath}`);
-                
-                const photoVerifiedExists = await page.evaluate(() => {
-                    // Look for the exact elements found in the DOM
-                    
-                    // 1. The verification badge icon
-                    const verificationBadge = document.querySelector('[data-qa-icon-name="badge-feature-verification"]');
-                    
-                    // 2. The specific verification text element
-                    const verificationTextElement = document.querySelector('.encounters-story-profile__verification-text');
-                    const hasVerificationText = verificationTextElement && 
-                                               verificationTextElement.textContent && 
-                                               verificationTextElement.textContent.includes('verified');
-                    
-                    // 3. As a fallback, check other known patterns
-                    const verificationClasses = [
-                        'verified', 
-                        'verification', 
-                        'photo-verified', 
-                        'badge-feature-verification'
-                    ];
-                    
-                    // Build a selector for elements with classes containing these terms
-                    const classSelectors = verificationClasses.map(cls => `[class*="${cls}"]`).join(',');
-                    const verificationElements = document.querySelectorAll(classSelectors);
-                    
-                    // 4. Check for actual text in the entire page as a last resort
-                    const pageText = document.body.innerText;
-                    const hasVerifiedText = pageText.includes('Photo verified') || 
-                                           pageText.includes('Verified') ||
-                                           pageText.includes('verified');
-                    
-                    // Return comprehensive information
-                    return {
-                        // Consider verified if we found any of the specific verification elements
-                        found: !!verificationBadge || hasVerificationText || verificationElements.length > 0 || hasVerifiedText,
-                        exactMatch: {
-                            badge: !!verificationBadge,
-                            textElement: !!verificationTextElement,
-                            hasVerificationText: hasVerificationText
-                        },
-                        fallbacks: {
-                            classElements: verificationElements.length,
-                            pageText: hasVerifiedText
-                        }
-                    };
-                });
-                
-                // Detailed logging of what we found
-                console.log(`Verification check results:`);
-                console.log(`- Badge element found: ${photoVerifiedExists.exactMatch.badge ? 'YES' : 'NO'}`);
-                console.log(`- Text element found: ${photoVerifiedExists.exactMatch.textElement ? 'YES' : 'NO'}`);
-                console.log(`- Verification text in element: ${photoVerifiedExists.exactMatch.hasVerificationText ? 'YES' : 'NO'}`);
-                console.log(`- Other verification elements: ${photoVerifiedExists.fallbacks.classElements}`);
-                console.log(`- Verification in page text: ${photoVerifiedExists.fallbacks.pageText ? 'YES' : 'NO'}`);
-                console.log(`- Overall verdict: ${photoVerifiedExists.found ? 'VERIFIED ✅' : 'NOT VERIFIED ❌'}`);
-                
-                return photoVerifiedExists.found;
-            } catch (error) {
-                console.log('Error checking photo verification:', error.message);
-                return false;
-            }
+            await testButtons(page, buttonPositions);
         }
         
         // Allow user to set like probability
         console.log('\n==== ALGORITHM SETTINGS ====');
         console.log('Based on the Elo rating system analysis, the optimal right swipe ratio is 18%');
         const likePercentage = await question('Enter percentage chance to like profiles (default: 18): ') || 18;
-        const likeChance = parseInt(likePercentage) / 100;
-        
-        // Advanced algorithm settings
-        console.log('\nThe Elo-optimized algorithm simulates:');
-        console.log('- Swiping left on most high-Elo profiles (to boost your score)');
-        console.log('- Selectively swiping right on mid-to-high profiles');
-        console.log('- Avoiding right swipes on low-Elo profiles');
-        console.log('- Adding randomness to avoid algorithm penalties');
-
-        // Track swipe patterns to maintain optimal distribution
-        let swipeCount = 0;
-        let likesCount = 0;
-        
-        console.log(`\nStarting swipe loop with ${likePercentage}% chance to like...`);
-        console.log('👍 button: ' + JSON.stringify(likePos));
-        console.log('👎 button: ' + JSON.stringify(passPos));
         
         // Document rest time feature
         console.log('\n==== REST TIME FEATURE ====');
@@ -407,17 +95,26 @@ async function cleanup() {
         console.log('This helps make the swiping pattern look more natural and reduces the risk of detection.');
         console.log('==============================\n');
         
+        // Track swipe patterns to maintain optimal distribution
+        let swipeCount = 0;
+        let likesCount = 0;
+        const likeChance = parseInt(likePercentage) / 100;
+        
+        console.log(`\nStarting swipe loop with ${likePercentage}% chance to like...`);
+        console.log('👍 button: ' + JSON.stringify({x: buttonPositions.likeButtonX, y: buttonPositions.likeButtonY}));
+        console.log('👎 button: ' + JSON.stringify({x: buttonPositions.passButtonX, y: buttonPositions.passButtonY}));
+        
         while (true) {
             swipeCount++;
             
             // First check if profile is photo verified before doing any profile interactions
             console.log(`\n[${swipeCount}] Checking if profile is photo verified...`);
-            const isPhotoVerified = await isProfilePhotoVerified(page);
+            const isPhotoVerified = await isProfilePhotoVerified(page, screenshotDir);
             
             // If not photo verified, immediately swipe left without profile checking
             if (!isPhotoVerified) {
                 console.log(`[${swipeCount}] ❌ Profile is NOT photo verified - Automatically swiping Left (PASS)`);
-                await clickAtPosition(page, passPos.x, passPos.y);
+                await processProfile(page, buttonPositions, false);
                 
                 // Add random delay between swipes
                 const waitTime = Math.random() * 3000 + 800;
@@ -459,73 +156,15 @@ async function cleanup() {
             
             if (shouldLike) {
                 console.log(`[${swipeCount}] Decision: Swiping Right (LIKE) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
-                await clickAtPosition(page, likePos.x, likePos.y);
+                await processProfile(page, buttonPositions, true);
                 likesCount++;
                 
                 // After liking, check for match notification and handle it
                 console.log('Checking for match notification...');
-                try {
-                    // Wait a short time for any match dialog to appear
-                    await delay(1500);
-                    
-                    // Check for "Continue Bumbling" button using multiple possible selectors
-                    const continueBumblingExists = await page.evaluate(() => {
-                        // Look for button with specific text
-                        const buttons = Array.from(document.querySelectorAll('button'));
-                        const continueBumblingBtn = buttons.find(btn => 
-                            btn.textContent && btn.textContent.includes('Continue Bumbling')
-                        );
-                        
-                        // Look for alternative selectors
-                        const altSelectors = [
-                            '[data-qa-role="continue-bumbling"]',
-                            '[aria-label="Continue Bumbling"]',
-                            '[class*="continue-button"]',
-                            '.continue-bumbling',
-                            // Common selectors that might contain a continue button in a match dialog
-                            '.match-notification button',
-                            '.match-dialog button',
-                            '.encounters-match button'
-                        ];
-                        
-                        const altButton = altSelectors.map(sel => document.querySelector(sel)).find(el => el);
-                        
-                        // Return position if button found
-                        if (continueBumblingBtn) {
-                            const rect = continueBumblingBtn.getBoundingClientRect();
-                            return {
-                                found: true,
-                                x: Math.round(rect.left + rect.width / 2),
-                                y: Math.round(rect.top + rect.height / 2),
-                                method: 'text-match'
-                            };
-                        } else if (altButton) {
-                            const rect = altButton.getBoundingClientRect();
-                            return {
-                                found: true,
-                                x: Math.round(rect.left + rect.width / 2),
-                                y: Math.round(rect.top + rect.height / 2),
-                                method: 'selector-match'
-                            };
-                        }
-                        
-                        return { found: false };
-                    });
-                    
-                    if (continueBumblingExists.found) {
-                        console.log(`Match detected! Clicking "Continue Bumbling" button using ${continueBumblingExists.method}...`);
-                        await clickAtPosition(page, continueBumblingExists.x, continueBumblingExists.y);
-                        console.log('Match dialog dismissed, continuing to swipe.');
-                        
-                        // Add a short delay after dismissing the match dialog
-                        await delay(1000);
-                    }
-                } catch (error) {
-                    console.log('No match notification found, continuing...');
-                }
+                await handleMatchNotification(page);
             } else {
                 console.log(`[${swipeCount}] Decision: Swiping Left (PASS) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
-                await clickAtPosition(page, passPos.x, passPos.y);
+                await processProfile(page, buttonPositions, false);
             }
             
             // Add random delay between swipes (more variance for natural behavior)
