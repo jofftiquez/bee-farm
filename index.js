@@ -12,6 +12,7 @@ const { setupSignalHandlers } = require('./lib/cleanup');
 const { extractProfileInfo } = require('./lib/profile-analysis');
 const { saveSession, loadSession, scheduleSessionSaving, getSessionFingerprint } = require('./lib/session');
 const logger = require('./lib/logger');
+const config = require('./lib/config');
 
 // Variables to track resources that need cleanup
 let browser = null;
@@ -156,13 +157,19 @@ async function cleanup() {
         let sessionStartTime = Date.now();
         
         // Session limits to avoid detection (randomized)
-        const maxSessionTime = (Math.floor(Math.random() * 30) + 45) * 60 * 1000; // 45-75 minutes
-        const maxSwipes = Math.floor(Math.random() * 50) + 50; // 50-100 swipes per session
+        const maxSessionMinutes = Math.floor(Math.random() * 
+            (config.swiping.session.duration.max - config.swiping.session.duration.min + 1)) 
+            + config.swiping.session.duration.min;
+        const maxSessionTime = maxSessionMinutes * 60 * 1000; // Convert to milliseconds
+        
+        const maxSwipes = Math.floor(Math.random() * 
+            (config.swiping.session.maxSwipes.max - config.swiping.session.maxSwipes.min + 1)) 
+            + config.swiping.session.maxSwipes.min;
         
         logger.section('Starting Swipe Loop');
         logger.log(`👍 button: (${buttonPositions.likeButtonX}, ${buttonPositions.likeButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
         logger.log(`👎 button: (${buttonPositions.passButtonX}, ${buttonPositions.passButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
-        logger.log(`Session limits: ${Math.round(maxSessionTime/60000)} minutes or ${maxSwipes} swipes`, logger.LOG_LEVELS.INFO, 'SESSION');
+        logger.log(`Session limits: ${maxSessionMinutes} minutes or ${maxSwipes} swipes`, logger.LOG_LEVELS.INFO, 'SESSION');
         
         while (true) {
             // Check session limits to avoid detection
@@ -222,28 +229,35 @@ async function cleanup() {
             }
             
             // Every 8-12 profiles, save the session to mimic browser behavior
-            if (swipeCount % (Math.floor(Math.random() * 5) + 8) === 0) {
+            const sessionSaveFrequency = Math.floor(Math.random() * 
+                (config.swiping.session.sessionSaveFrequency.max - config.swiping.session.sessionSaveFrequency.min + 1)) 
+                + config.swiping.session.sessionSaveFrequency.min;
+                
+            if (swipeCount % sessionSaveFrequency === 0) {
                 await saveSession(page);
             }
             
-            // Add random delay between swipes (more variance for natural behavior)
-            const minDelay = 800; // Minimum 0.8 seconds
-            const maxRandomDelay = 5000; // Up to 5 additional seconds
+            // Add random delay between swipes with configurable timing
+            const shortDelayProb = config.swiping.delays.betweenProfiles.shortDelayProbability;
             
-            // Use a non-uniform distribution to occasionally have longer pauses
+            // Use a non-uniform distribution based on config probabilities
             let waitTime;
-            if (Math.random() < 0.8) {
-                // 80% of the time, use a shorter delay (0.8-3 seconds)
-                waitTime = Math.random() * 2200 + minDelay;
+            if (Math.random() < shortDelayProb) {
+                // Short delay case
+                const shortDelayMin = config.swiping.delays.betweenProfiles.shortDelay.min;
+                const shortDelayRange = config.swiping.delays.betweenProfiles.shortDelay.max - shortDelayMin;
+                waitTime = Math.random() * shortDelayRange + shortDelayMin;
             } else {
-                // 20% of the time, use a longer delay (3-6 seconds)
-                waitTime = Math.random() * maxRandomDelay + 3000;
+                // Long delay case
+                const longDelayMin = config.swiping.delays.betweenProfiles.longDelay.min;
+                const longDelayRange = config.swiping.delays.betweenProfiles.longDelay.max - longDelayMin;
+                waitTime = Math.random() * longDelayRange + longDelayMin;
             }
             
             await delay(waitTime);
             
-            // Every 10 swipes, display statistics
-            if (swipeCount % 10 === 0) {
+            // Every X swipes, display statistics
+            if (swipeCount % config.swiping.session.statsDisplayFrequency === 0) {
                 logger.displayStats(swipeCount, likesCount);
                 
                 // Calculate and log session metrics
@@ -264,16 +278,20 @@ async function cleanup() {
                 global.lastRestTime = Date.now();
             }
             
-            // Check if it's time for a rest period (every 15-20 minutes)
+            // Check if it's time for a rest period
             const minutesSinceLastRest = (Date.now() - global.lastRestTime) / (1000 * 60);
             
-            // More random rest frequency to avoid patterns
-            const restFrequency = Math.floor(Math.random() * 8) + 13; // 13-20 minutes
+            // More random rest frequency from config
+            const restFrequency = Math.floor(Math.random() * 
+                (config.swiping.restPeriods.frequency.max - config.swiping.restPeriods.frequency.min + 1)) 
+                + config.swiping.restPeriods.frequency.min;
             
             if (minutesSinceLastRest >= restFrequency) {
                 // Time for a rest period
-                // More random duration
-                const restDuration = Math.floor(Math.random() * 8) + 3; // 3-10 minutes
+                // More random duration from config
+                const restDuration = Math.floor(Math.random() * 
+                    (config.swiping.restPeriods.duration.max - config.swiping.restPeriods.duration.min + 1)) 
+                    + config.swiping.restPeriods.duration.min;
                 
                 logger.section('Rest Period');
                 logger.log(`Taking a break for ${restDuration} minutes to simulate natural behavior.`, 
