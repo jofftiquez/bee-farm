@@ -21,6 +21,9 @@ yarn-error.log*
 # Screenshots directory
 screenshots/
 
+# Authentication data
+user_data/
+
 # OS specific files
 .DS_Store
 Thumbs.db

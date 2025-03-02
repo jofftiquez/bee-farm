@@ -52,11 +52,21 @@ async function cleanup() {
 
 (async () => {
     try {
+        // Create user data directory if it doesn't exist
+        const userDataDir = path.join(process.cwd(), 'user_data');
+        try {
+            await fs.mkdir(userDataDir, { recursive: true });
+            console.log(`User data directory created/verified at: ${userDataDir}`);
+        } catch (err) {
+            console.log('Error creating user data directory:', err.message);
+        }
+        
         console.log('Launching browser...');
         browser = await puppeteer.launch({ 
             headless: false, 
             defaultViewport: null,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            userDataDir: './user_data'
         });
         
         console.log('Opening new page...');
@@ -73,6 +83,39 @@ async function cleanup() {
         console.log('Navigating to Bumble...');
         await page.goto('https://bumble.com/app', { waitUntil: 'networkidle2' });
         console.log('Page loaded!');
+
+        // Check if we're already logged in
+        console.log('Checking authentication status...');
+        const isLoggedIn = await page.evaluate(() => {
+            // Check for elements that would indicate we're in the app
+            const swipeButtons = document.querySelector('[data-qa-role="encounters-action-like"]') ||
+                document.querySelector('[data-qa-role="encounters-action-dislike"]');
+            
+            // Check for elements that would indicate we're on the login page
+            const loginElements = document.querySelector('[data-qa-role="google-login"]') ||
+                document.querySelector('[data-qa-role="facebook-login"]') ||
+                document.querySelector('[data-qa-role="phone-login"]');
+                
+            // Return true if we find app elements and no login elements
+            return !!swipeButtons || !loginElements;
+        });
+        
+        if (isLoggedIn) {
+            console.log('✅ Already logged in! Session was successfully restored.');
+        } else {
+            console.log('⚠️ Not logged in. Please log into Bumble when the browser opens.');
+            console.log('Your login will be remembered for future sessions.');
+            
+            // Wait for login to complete and navigation to the app
+            console.log('Waiting for successful login and navigation to the app...');
+            await page.waitForSelector('[data-qa-role="encounters-action-like"], [aria-label="Like"], .profile-header', { 
+                timeout: 300000 // 5 minutes timeout for login
+            }).catch(() => {
+                console.log('Login timeout - please manually navigate to the swiping interface when logged in.');
+            });
+            
+            console.log('Login detected or timeout reached!');
+        }
 
         // Helper function for delays
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -261,6 +304,78 @@ async function cleanup() {
             await page.mouse.click(x, y, { delay: Math.random() * 100 + 50 });
         }
         
+        // Function to check if profile is photo verified
+        async function isProfilePhotoVerified(page) {
+            console.log('Checking if profile is photo verified...');
+            
+            try {
+                // First, take a screenshot for debugging
+                const verificationScreenshotPath = path.join(screenshotDir, 'verification_check.png');
+                await page.screenshot({ path: verificationScreenshotPath });
+                console.log(`Verification screenshot saved to: ${verificationScreenshotPath}`);
+                
+                const photoVerifiedExists = await page.evaluate(() => {
+                    // Look for the exact elements found in the DOM
+                    
+                    // 1. The verification badge icon
+                    const verificationBadge = document.querySelector('[data-qa-icon-name="badge-feature-verification"]');
+                    
+                    // 2. The specific verification text element
+                    const verificationTextElement = document.querySelector('.encounters-story-profile__verification-text');
+                    const hasVerificationText = verificationTextElement && 
+                                               verificationTextElement.textContent && 
+                                               verificationTextElement.textContent.includes('verified');
+                    
+                    // 3. As a fallback, check other known patterns
+                    const verificationClasses = [
+                        'verified', 
+                        'verification', 
+                        'photo-verified', 
+                        'badge-feature-verification'
+                    ];
+                    
+                    // Build a selector for elements with classes containing these terms
+                    const classSelectors = verificationClasses.map(cls => `[class*="${cls}"]`).join(',');
+                    const verificationElements = document.querySelectorAll(classSelectors);
+                    
+                    // 4. Check for actual text in the entire page as a last resort
+                    const pageText = document.body.innerText;
+                    const hasVerifiedText = pageText.includes('Photo verified') || 
+                                           pageText.includes('Verified') ||
+                                           pageText.includes('verified');
+                    
+                    // Return comprehensive information
+                    return {
+                        // Consider verified if we found any of the specific verification elements
+                        found: !!verificationBadge || hasVerificationText || verificationElements.length > 0 || hasVerifiedText,
+                        exactMatch: {
+                            badge: !!verificationBadge,
+                            textElement: !!verificationTextElement,
+                            hasVerificationText: hasVerificationText
+                        },
+                        fallbacks: {
+                            classElements: verificationElements.length,
+                            pageText: hasVerifiedText
+                        }
+                    };
+                });
+                
+                // Detailed logging of what we found
+                console.log(`Verification check results:`);
+                console.log(`- Badge element found: ${photoVerifiedExists.exactMatch.badge ? 'YES' : 'NO'}`);
+                console.log(`- Text element found: ${photoVerifiedExists.exactMatch.textElement ? 'YES' : 'NO'}`);
+                console.log(`- Verification text in element: ${photoVerifiedExists.exactMatch.hasVerificationText ? 'YES' : 'NO'}`);
+                console.log(`- Other verification elements: ${photoVerifiedExists.fallbacks.classElements}`);
+                console.log(`- Verification in page text: ${photoVerifiedExists.fallbacks.pageText ? 'YES' : 'NO'}`);
+                console.log(`- Overall verdict: ${photoVerifiedExists.found ? 'VERIFIED ✅' : 'NOT VERIFIED ❌'}`);
+                
+                return photoVerifiedExists.found;
+            } catch (error) {
+                console.log('Error checking photo verification:', error.message);
+                return false;
+            }
+        }
+        
         // Allow user to set like probability
         console.log('\n==== ALGORITHM SETTINGS ====');
         console.log('Based on the Elo rating system analysis, the optimal right swipe ratio is 18%');
@@ -279,8 +394,8 @@ async function cleanup() {
         let likesCount = 0;
         
         console.log(`\nStarting swipe loop with ${likePercentage}% chance to like...`);
-        console.log('LIKE button: ' + JSON.stringify(likePos));
-        console.log('PASS button: ' + JSON.stringify(passPos));
+        console.log('👍 button: ' + JSON.stringify(likePos));
+        console.log('👎 button: ' + JSON.stringify(passPos));
         
         // Document rest time feature
         console.log('\n==== REST TIME FEATURE ====');
@@ -293,9 +408,28 @@ async function cleanup() {
         console.log('==============================\n');
         
         while (true) {
-            await simulateProfileCheck(page);
-            
             swipeCount++;
+            
+            // First check if profile is photo verified before doing any profile interactions
+            console.log(`\n[${swipeCount}] Checking if profile is photo verified...`);
+            const isPhotoVerified = await isProfilePhotoVerified(page);
+            
+            // If not photo verified, immediately swipe left without profile checking
+            if (!isPhotoVerified) {
+                console.log(`[${swipeCount}] ❌ Profile is NOT photo verified - Automatically swiping Left (PASS)`);
+                await clickAtPosition(page, passPos.x, passPos.y);
+                
+                // Add random delay between swipes
+                const waitTime = Math.random() * 3000 + 800;
+                await delay(waitTime);
+                continue; // Skip to next profile
+            }
+            
+            // Profile is verified - proceed with normal decision logic
+            console.log(`[${swipeCount}] ✅ Profile IS photo verified - Checking profile details...`);
+            
+            // Only simulate profile check for verified profiles
+            await simulateProfileCheck(page);
             
             // Calculate current like ratio
             const currentLikeRatio = likesCount / swipeCount;
@@ -324,7 +458,7 @@ async function cleanup() {
             const shouldLike = Math.random() < adjustedLikeChance;
             
             if (shouldLike) {
-                console.log(`[${swipeCount}] Swiping Right (LIKE) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
+                console.log(`[${swipeCount}] Decision: Swiping Right (LIKE) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
                 await clickAtPosition(page, likePos.x, likePos.y);
                 likesCount++;
                 
@@ -390,7 +524,7 @@ async function cleanup() {
                     console.log('No match notification found, continuing...');
                 }
             } else {
-                console.log(`[${swipeCount}] Swiping Left (PASS) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
+                console.log(`[${swipeCount}] Decision: Swiping Left (PASS) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
                 await clickAtPosition(page, passPos.x, passPos.y);
             }
             
