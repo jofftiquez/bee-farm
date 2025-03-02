@@ -22,6 +22,7 @@ Use at your own risk. The authors and contributors of this code are not responsi
 - Configurable like/pass ratio with built-in pattern randomization
 - Automatic cleanup of temporary files
 - Screenshot-assisted troubleshooting
+- Natural rest periods (15-20 minute activity followed by 5-10 minute breaks)
 
 ## 📋 Requirements
 
@@ -69,7 +70,14 @@ node index.js
 
 3. **Algorithm Optimization**: Uses Elo-based swiping patterns to improve your profile score
 
-4. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
+4. **Rest Periods**: The script implements natural rest periods:
+   - Takes a break after 15-20 minutes of activity (randomly determined)
+   - Rests for 5-10 minutes during each break (randomly determined)
+   - Completely stops all activity during rest periods
+   - Automatically resumes after each rest period
+   - Helps simulate natural human behavior and reduce detection risk
+
+5. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
 
 ## 🧮 The Math Behind the Algorithm
 

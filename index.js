@@ -282,6 +282,16 @@ async function cleanup() {
         console.log('LIKE button: ' + JSON.stringify(likePos));
         console.log('PASS button: ' + JSON.stringify(passPos));
         
+        // Document rest time feature
+        console.log('\n==== REST TIME FEATURE ====');
+        console.log('To simulate natural human behavior, the bot will:');
+        console.log('- Take a break every 15-20 minutes (randomly determined)');
+        console.log('- Rest for 5-10 minutes during each break (randomly determined)');
+        console.log('- Completely stop activity during rest periods');
+        console.log('- Resume automatically after the rest period ends');
+        console.log('This helps make the swiping pattern look more natural and reduces the risk of detection.');
+        console.log('==============================\n');
+        
         while (true) {
             await simulateProfileCheck(page);
             
@@ -334,6 +344,37 @@ async function cleanup() {
                 console.log(`Left swipes: ${swipeCount - likesCount} (${Math.round((1 - currentLikeRatio) * 100)}%)`);
                 console.log(`Target right swipe ratio: ${likePercentage}%`);
                 console.log(`=========================\n`);
+            }
+            
+            // Implement rest periods to simulate natural usage patterns
+            // Track the time spent swiping
+            if (!global.swipeStartTime) {
+                global.swipeStartTime = Date.now();
+                global.lastRestTime = Date.now();
+            }
+            
+            // Check if it's time for a rest period (every 15-20 minutes)
+            const minutesSinceLastRest = (Date.now() - global.lastRestTime) / (1000 * 60);
+            const restFrequency = Math.floor(Math.random() * 6) + 15; // 15-20 minutes
+            
+            if (minutesSinceLastRest >= restFrequency) {
+                // Time for a rest period
+                const restDuration = Math.floor(Math.random() * 6) + 5; // 5-10 minutes
+                
+                console.log(`\n==== REST PERIOD ====`);
+                console.log(`Taking a break for ${restDuration} minutes to simulate natural behavior.`);
+                console.log(`Will resume swiping at ${new Date(Date.now() + restDuration * 60 * 1000).toLocaleTimeString()}`);
+                console.log(`======================\n`);
+                
+                // Wait for the rest duration
+                await delay(restDuration * 60 * 1000);
+                
+                // Update last rest time
+                global.lastRestTime = Date.now();
+                
+                console.log(`\n==== RESUMING ACTIVITY ====`);
+                console.log(`Rest period complete. Resuming swiping...`);
+                console.log(`=============================\n`);
             }
         }
     } catch (error) {
