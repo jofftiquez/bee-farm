@@ -23,6 +23,7 @@ screenshots/
 
 # Authentication data
 user_data/
+session_data/
 
 # OS specific files
 .DS_Store
@@ -35,4 +36,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.sublime-project
-*.sublime-workspace 
+*.sublime-workspace
+
+# User preferences file
+user_preferences.json 

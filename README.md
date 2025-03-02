@@ -1,6 +1,82 @@
-# Bumble Automation
+# Bumble Automation with Anti-Detection Measures
 
-A Node.js application that automates interactions with Bumble using Puppeteer, optimized with Elo rating system analysis.
+This project provides a Puppeteer-based automation script for Bumble with advanced anti-detection measures to avoid bot detection.
+
+## Features
+
+- **Profile Analysis**: Analyzes Bumble profiles based on bio text, verification status, and interests
+- **Smart Swiping**: Makes decisions based on user preferences and profile content
+- **Session Persistence**: Maintains login sessions between runs with cookie management
+- **Enhanced Logging**: Clear, color-coded logs with structured data presentation
+
+## Anti-Detection Measures
+
+This script includes the following measures to avoid bot detection:
+
+1. **Puppeteer Stealth Mode**
+   - Uses puppeteer-extra with stealth plugin to bypass detection
+   - Modifies browser fingerprinting properties
+   - Randomizes user agents and HTTP headers
+
+2. **Human-Like Interaction**
+   - Randomized mouse movements with realistic acceleration/deceleration
+   - Variable click durations and natural profile scrolling
+   - Random delays between actions with non-uniform distribution
+
+3. **Browser Environment Evasions**
+   - Spoofed WebGL fingerprinting
+   - Realistic plugins and MIME types
+   - Modified navigator properties and permissions API behavior
+
+4. **Session Management**
+   - Maintains consistent fingerprinting between sessions
+   - Periodically saves cookies during normal operation
+   - Simulates browser behavior with regular cookie updates
+
+5. **Usage Pattern Simulation**
+   - Enforces session limits to mimic natural usage (time-based and swipe count)
+   - Implements rest periods with random durations
+   - Varies interaction patterns to prevent predictability
+
+## Setup and Usage
+
+1. Install dependencies:
+   ```
+   pnpm install
+   ```
+
+2. Run the script:
+   ```
+   node index.js
+   ```
+
+3. Follow the prompts to log in (first time only) and navigate to the swiping interface
+
+## Configuration
+
+The script uses the following configuration files:
+
+- `user_preferences.json`: Define your preferences for profile matching
+- `session_data/`: Contains session cookies and fingerprinting data
+
+## Advanced Features
+
+- **Profile Verification Checks**: Only swipes right on verified profiles
+- **Bio Analysis**: Checks for keywords to avoid and interests that align with preferences
+- **Match Handling**: Automatically handles match popups when they appear
+
+## Customization
+
+You can modify the following aspects:
+- Swiping criteria in `lib/swipe-logic.js`
+- Anti-detection settings in `lib/anti-detection.js`
+- Browser configuration in `lib/browser.js`
+
+## Notes
+
+- This script is for educational purposes only
+- Use responsibly and in accordance with Bumble's terms of service
+- The script operates in a visible browser window and requires manual login
 
 ## 🚨 Important Disclaimer
 
@@ -170,6 +246,22 @@ Please be aware of the following limitations when using this script:
 - **System sleep/hibernation** during rest periods will pause execution without the script knowing, disrupting the timing system.
 
 If you encounter issues, try restarting the script and recalibrating the button positions.
+
+## 🔐 Authentication and Session Persistence
+
+The script includes a robust session management system to maintain your login between sessions:
+
+- **Cookie-based Authentication**: The script saves and reuses session cookies to avoid logging in each time
+- **Login Detection**: Automatically determines if you're already logged in or need to authenticate
+- **Session Directory**: Stores authentication data in the `session_data/` folder - do not delete this!
+- **Backup Mechanism**: Creates backup copies of critical authentication cookies
+- **Periodic Updates**: Refreshes session data every 5 minutes to maintain authenticity
+- **First-Run Process**: On first use, you'll need to log in manually - the script will save your session for future runs
+
+If you experience authentication issues:
+1. Make sure `session_data/` exists and contains cookie files
+2. Try clearing the session data and logging in fresh if cookies expire
+3. Check that your account hasn't been flagged by Bumble security systems
 
 ## 📜 License
 

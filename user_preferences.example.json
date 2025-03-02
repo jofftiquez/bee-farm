@@ -1,0 +1,29 @@
+{
+  "personalDescription": "I'm an active person who enjoys hiking, reading, and exploring new places. I have a passion for technology and enjoy deep conversations. I appreciate authenticity, kindness, and a good sense of humor.",
+  "interests": [
+    "hiking",
+    "reading",
+    "travel",
+    "technology",
+    "photography",
+    "cooking",
+    "fitness",
+    "music"
+  ],
+  "avoidKeywords": [
+    "just here for friends",
+    "not looking for anything serious",
+    "casual only",
+    "hookup",
+    "married",
+    "open relationship",
+    "ENM",
+    "polyamorous"
+  ],
+  "requireBio": true,
+  "alignmentThreshold": 0.3,
+  "llmSettings": {
+    "enabled": false,
+    "minComparisonScore": 0.6
+  }
+} 
