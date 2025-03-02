@@ -9,6 +9,7 @@ This project is for **educational purposes only**. Using automation scripts with
 - May violate Bumble's Terms of Service
 - Could potentially result in account suspension
 - May not align with the intended use of the platform
+- **May decrease your profile's score** instead of improving it, as Bumble's actual algorithm is proprietary and not publicly verified
 
 Use at your own risk. The authors and contributors of this code are not responsible for any consequences resulting from its use.
 
@@ -23,6 +24,7 @@ Use at your own risk. The authors and contributors of this code are not responsi
 - Automatic cleanup of temporary files
 - Screenshot-assisted troubleshooting
 - Natural rest periods (15-20 minute activity followed by 5-10 minute breaks)
+- Automatic match notification handling (dismisses "Continue Bumbling" dialogs)
 
 ## 📋 Requirements
 
@@ -70,16 +72,24 @@ node index.js
 
 3. **Algorithm Optimization**: Uses Elo-based swiping patterns to improve your profile score
 
-4. **Rest Periods**: The script implements natural rest periods:
+4. **Match Handling**: The script automatically manages match notifications:
+   - Detects when a match occurs after a right swipe
+   - Finds and clicks the "Continue Bumbling" button to dismiss match dialogs
+   - Uses multiple detection methods to handle different UI variations
+   - Ensures uninterrupted swiping even when matches occur
+
+5. **Rest Periods**: The script implements natural rest periods:
    - Takes a break after 15-20 minutes of activity (randomly determined)
    - Rests for 5-10 minutes during each break (randomly determined)
    - Completely stops all activity during rest periods
    - Automatically resumes after each rest period
    - Helps simulate natural human behavior and reduce detection risk
 
-5. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
+6. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
 
 ## 🧮 The Math Behind the Algorithm
+
+**IMPORTANT DISCLAIMER**: The algorithm theory presented below is based on general Elo rating systems and research into dating apps. Bumble's actual algorithm is proprietary and may function differently. This approach could potentially decrease your profile's score instead of improving it. Use at your own risk.
 
 The Bumble algorithm uses a variation of the Elo rating system, similar to chess rankings, where your score changes based on the "game" outcome when you interact with other profiles.
 
@@ -147,6 +157,19 @@ If button detection fails:
 1. The script will fall back to manual coordinate entry
 2. Check if Bumble has updated their UI or HTML structure
 3. Use the test functionality to confirm button positions work
+
+## ⚠️ Caveats
+
+Please be aware of the following limitations when using this script:
+
+- **Do not resize your browser window** after setup. The script relies on fixed coordinates for clicking, so resizing will cause clicks to miss their targets.
+- **UI changes by Bumble** may break button detection. The script attempts to find buttons in multiple ways, but major UI redesigns could require script updates.
+- **Extended usage** may increase the risk of detection by Bumble's anti-bot systems, despite the natural behavior simulation.
+- **Match handling** depends on the "Continue Bumbling" button being present. If Bumble changes this text or UI element, matches may interrupt the flow.
+- **Network issues** or slow connections can affect timing, potentially causing missed clicks or actions.
+- **System sleep/hibernation** during rest periods will pause execution without the script knowing, disrupting the timing system.
+
+If you encounter issues, try restarting the script and recalibrating the button positions.
 
 ## 📜 License
 

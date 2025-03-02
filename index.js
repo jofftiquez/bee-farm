@@ -327,6 +327,68 @@ async function cleanup() {
                 console.log(`[${swipeCount}] Swiping Right (LIKE) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
                 await clickAtPosition(page, likePos.x, likePos.y);
                 likesCount++;
+                
+                // After liking, check for match notification and handle it
+                console.log('Checking for match notification...');
+                try {
+                    // Wait a short time for any match dialog to appear
+                    await delay(1500);
+                    
+                    // Check for "Continue Bumbling" button using multiple possible selectors
+                    const continueBumblingExists = await page.evaluate(() => {
+                        // Look for button with specific text
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const continueBumblingBtn = buttons.find(btn => 
+                            btn.textContent && btn.textContent.includes('Continue Bumbling')
+                        );
+                        
+                        // Look for alternative selectors
+                        const altSelectors = [
+                            '[data-qa-role="continue-bumbling"]',
+                            '[aria-label="Continue Bumbling"]',
+                            '[class*="continue-button"]',
+                            '.continue-bumbling',
+                            // Common selectors that might contain a continue button in a match dialog
+                            '.match-notification button',
+                            '.match-dialog button',
+                            '.encounters-match button'
+                        ];
+                        
+                        const altButton = altSelectors.map(sel => document.querySelector(sel)).find(el => el);
+                        
+                        // Return position if button found
+                        if (continueBumblingBtn) {
+                            const rect = continueBumblingBtn.getBoundingClientRect();
+                            return {
+                                found: true,
+                                x: Math.round(rect.left + rect.width / 2),
+                                y: Math.round(rect.top + rect.height / 2),
+                                method: 'text-match'
+                            };
+                        } else if (altButton) {
+                            const rect = altButton.getBoundingClientRect();
+                            return {
+                                found: true,
+                                x: Math.round(rect.left + rect.width / 2),
+                                y: Math.round(rect.top + rect.height / 2),
+                                method: 'selector-match'
+                            };
+                        }
+                        
+                        return { found: false };
+                    });
+                    
+                    if (continueBumblingExists.found) {
+                        console.log(`Match detected! Clicking "Continue Bumbling" button using ${continueBumblingExists.method}...`);
+                        await clickAtPosition(page, continueBumblingExists.x, continueBumblingExists.y);
+                        console.log('Match dialog dismissed, continuing to swipe.');
+                        
+                        // Add a short delay after dismissing the match dialog
+                        await delay(1000);
+                    }
+                } catch (error) {
+                    console.log('No match notification found, continuing...');
+                }
             } else {
                 console.log(`[${swipeCount}] Swiping Left (PASS) - Current ratio: ${Math.round(currentLikeRatio * 100)}%`);
                 await clickAtPosition(page, passPos.x, passPos.y);
