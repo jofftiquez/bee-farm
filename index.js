@@ -155,170 +155,200 @@ async function cleanup() {
         let swipeCount = 0;
         let likesCount = 0;
         let sessionStartTime = Date.now();
+        let totalSessionsCompleted = 0;
         
-        // Session limits to avoid detection (randomized)
-        const maxSessionMinutes = Math.floor(Math.random() * 
-            (config.swiping.session.duration.max - config.swiping.session.duration.min + 1)) 
-            + config.swiping.session.duration.min;
-        const maxSessionTime = maxSessionMinutes * 60 * 1000; // Convert to milliseconds
-        
-        const maxSwipes = Math.floor(Math.random() * 
-            (config.swiping.session.maxSwipes.max - config.swiping.session.maxSwipes.min + 1)) 
-            + config.swiping.session.maxSwipes.min;
-        
-        logger.section('Starting Swipe Loop');
-        logger.log(`👍 button: (${buttonPositions.likeButtonX}, ${buttonPositions.likeButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
-        logger.log(`👎 button: (${buttonPositions.passButtonX}, ${buttonPositions.passButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
-        logger.log(`Session limits: ${maxSessionMinutes} minutes or ${maxSwipes} swipes`, logger.LOG_LEVELS.INFO, 'SESSION');
-        
-        while (true) {
-            // Check session limits to avoid detection
-            const sessionTimeElapsed = Date.now() - sessionStartTime;
-            if (sessionTimeElapsed >= maxSessionTime) {
-                logger.log(`Session time limit reached (${Math.round(sessionTimeElapsed/60000)} minutes). Ending session.`, 
-                          logger.LOG_LEVELS.WARNING, 'SESSION');
-                break;
-            }
+        while (true) { // Outer loop for multiple sessions
+            // Session limits to avoid detection (randomized)
+            const maxSessionMinutes = Math.floor(Math.random() * 
+                (config.swiping.session.duration.max - config.swiping.session.duration.min + 1)) 
+                + config.swiping.session.duration.min;
+            const maxSessionTime = maxSessionMinutes * 60 * 1000; // Convert to milliseconds
             
-            if (swipeCount >= maxSwipes) {
-                logger.log(`Session swipe limit reached (${swipeCount} swipes). Ending session.`, 
-                          logger.LOG_LEVELS.WARNING, 'SESSION');
-                break;
-            }
+            const maxSwipes = Math.floor(Math.random() * 
+                (config.swiping.session.maxSwipes.max - config.swiping.session.maxSwipes.min + 1)) 
+                + config.swiping.session.maxSwipes.min;
             
-            swipeCount++;
+            logger.section('Starting Swipe Loop');
+            logger.log(`👍 button: (${buttonPositions.likeButtonX}, ${buttonPositions.likeButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
+            logger.log(`👎 button: (${buttonPositions.passButtonX}, ${buttonPositions.passButtonY})`, logger.LOG_LEVELS.INFO, 'BUTTONS');
+            logger.log(`Session #${totalSessionsCompleted + 1} limits: ${maxSessionMinutes} minutes or ${maxSwipes} swipes`, logger.LOG_LEVELS.INFO, 'SESSION');
             
-            logger.section(`Profile #${swipeCount}`);
-            
-            // First check if profile is photo verified before doing any profile interactions
-            const isPhotoVerified = await isProfilePhotoVerified(page, screenshotDir);
-            
-            // Extract profile information regardless of verification status
-            const profileInfo = await extractProfileInfo(page, screenshotDir);
-            
-            // If not photo verified, immediately swipe left without profile checking
-            if (!isPhotoVerified) {
-                logger.log(`Profile is NOT photo verified - Automatically swiping Left (PASS)`, 
-                          logger.LOG_LEVELS.WARNING, 'PROFILE');
-                          
-                await processProfile(page, buttonPositions, false, profileInfo, userPreferences);
+            let sessionEnded = false;
+            swipeCount = 0;
+            likesCount = 0;
+            sessionStartTime = Date.now();
+
+            while (!sessionEnded) {
+                // Check session limits to avoid detection
+                const sessionTimeElapsed = Date.now() - sessionStartTime;
+                if (sessionTimeElapsed >= maxSessionTime) {
+                    logger.log(`Session time limit reached (${Math.round(sessionTimeElapsed/60000)} minutes).`, 
+                              logger.LOG_LEVELS.WARNING, 'SESSION');
+                    sessionEnded = true;
+                    break;
+                }
                 
-                // Add random delay between swipes with more variability to appear human
-                const waitTime = Math.random() * 3000 + 800;
+                if (swipeCount >= maxSwipes) {
+                    logger.log(`Session swipe limit reached (${swipeCount} swipes).`, 
+                              logger.LOG_LEVELS.WARNING, 'SESSION');
+                    sessionEnded = true;
+                    break;
+                }
+                
+                swipeCount++;
+                
+                logger.section(`Profile #${swipeCount}`);
+                
+                // First check if profile is photo verified before doing any profile interactions
+                const isPhotoVerified = await isProfilePhotoVerified(page, screenshotDir);
+                
+                // Extract profile information regardless of verification status
+                const profileInfo = await extractProfileInfo(page, screenshotDir);
+                
+                // If not photo verified, immediately swipe left without profile checking
+                if (!isPhotoVerified) {
+                    logger.log(`Profile is NOT photo verified - Automatically swiping Left (PASS)`, 
+                              logger.LOG_LEVELS.WARNING, 'PROFILE');
+                              
+                    await processProfile(page, buttonPositions, false, profileInfo, userPreferences);
+                    
+                    // Add random delay between swipes with more variability to appear human
+                    const waitTime = Math.random() * 3000 + 800;
+                    await delay(waitTime);
+                    continue; // Skip to next profile
+                }
+                
+                // Profile is verified - proceed with bio analysis
+                logger.log(`Profile IS photo verified - Proceeding with analysis...`, 
+                          logger.LOG_LEVELS.SUCCESS, 'PROFILE');
+                
+                // Simulate a real user checking the profile
+                await simulateProfileCheck(page);
+                
+                // Process the profile based on the extracted information and preferences
+                const swipeDirection = await processProfile(page, buttonPositions, isPhotoVerified, profileInfo, userPreferences);
+                
+                // Update stats if we swiped right
+                if (swipeDirection === 'right') {
+                    likesCount++;
+                    
+                    // After liking, check for match notification and handle it
+                    logger.log('Checking for match notification...', logger.LOG_LEVELS.INFO, 'MATCH');
+                    await handleMatchNotification(page);
+                }
+                
+                // Every 8-12 profiles, save the session to mimic browser behavior
+                const sessionSaveFrequency = Math.floor(Math.random() * 
+                    (config.swiping.session.sessionSaveFrequency.max - config.swiping.session.sessionSaveFrequency.min + 1)) 
+                    + config.swiping.session.sessionSaveFrequency.min;
+                    
+                if (swipeCount % sessionSaveFrequency === 0) {
+                    await saveSession(page);
+                }
+                
+                // Add random delay between swipes with configurable timing
+                const shortDelayProb = config.swiping.delays.betweenProfiles.shortDelayProbability;
+                
+                // Use a non-uniform distribution based on config probabilities
+                let waitTime;
+                if (Math.random() < shortDelayProb) {
+                    // Short delay case
+                    const shortDelayMin = config.swiping.delays.betweenProfiles.shortDelay.min;
+                    const shortDelayRange = config.swiping.delays.betweenProfiles.shortDelay.max - shortDelayMin;
+                    waitTime = Math.random() * shortDelayRange + shortDelayMin;
+                } else {
+                    // Long delay case
+                    const longDelayMin = config.swiping.delays.betweenProfiles.longDelay.min;
+                    const longDelayRange = config.swiping.delays.betweenProfiles.longDelay.max - longDelayMin;
+                    waitTime = Math.random() * longDelayRange + longDelayMin;
+                }
+                
                 await delay(waitTime);
-                continue; // Skip to next profile
+                
+                // Every X swipes, display statistics
+                if (swipeCount % config.swiping.session.statsDisplayFrequency === 0) {
+                    logger.displayStats(swipeCount, likesCount);
+                    
+                    // Calculate and log session metrics
+                    const elapsedMinutes = Math.round((Date.now() - sessionStartTime) / 60000);
+                    const remainingSwipes = maxSwipes - swipeCount;
+                    const remainingMinutes = Math.round((maxSessionTime - (Date.now() - sessionStartTime)) / 60000);
+                    
+                    logger.log(`Session progress: ${elapsedMinutes} minutes elapsed, ${remainingMinutes} minutes remaining`, 
+                              logger.LOG_LEVELS.INFO, 'SESSION');
+                    logger.log(`Swipe progress: ${swipeCount}/${maxSwipes} (${remainingSwipes} remaining)`, 
+                              logger.LOG_LEVELS.INFO, 'SESSION');
+                }
+                
+                // Implement rest periods to simulate natural usage patterns
+                // Track the time spent swiping
+                if (!global.swipeStartTime) {
+                    global.swipeStartTime = Date.now();
+                    global.lastRestTime = Date.now();
+                }
+                
+                // Check if it's time for a rest period
+                const minutesSinceLastRest = (Date.now() - global.lastRestTime) / (1000 * 60);
+                
+                // More random rest frequency from config
+                const restFrequency = Math.floor(Math.random() * 
+                    (config.swiping.restPeriods.frequency.max - config.swiping.restPeriods.frequency.min + 1)) 
+                    + config.swiping.restPeriods.frequency.min;
+                
+                if (minutesSinceLastRest >= restFrequency) {
+                    // Time for a rest period
+                    // More random duration from config
+                    const restDuration = Math.floor(Math.random() * 
+                        (config.swiping.restPeriods.duration.max - config.swiping.restPeriods.duration.min + 1)) 
+                        + config.swiping.restPeriods.duration.min;
+                    
+                    logger.section('Rest Period');
+                    logger.log(`Taking a break for ${restDuration} minutes to simulate natural behavior.`, 
+                              logger.LOG_LEVELS.INFO, 'REST');
+                    logger.log(`Will resume swiping at ${new Date(Date.now() + restDuration * 60 * 1000).toLocaleTimeString()}`, 
+                              logger.LOG_LEVELS.INFO, 'REST');
+                    
+                    // Save session before taking a break
+                    await saveSession(page);
+                    
+                    // Wait for the rest duration
+                    await delay(restDuration * 60 * 1000);
+                    
+                    // Update last rest time
+                    global.lastRestTime = Date.now();
+                    
+                    logger.section('Resuming Activity');
+                    logger.log(`Rest period complete. Resuming swiping...`, logger.LOG_LEVELS.SUCCESS, 'REST');
+                }
             }
             
-            // Profile is verified - proceed with bio analysis
-            logger.log(`Profile IS photo verified - Proceeding with analysis...`, 
-                      logger.LOG_LEVELS.SUCCESS, 'PROFILE');
+            logger.section('Session Complete');
+            logger.log(`Session #${totalSessionsCompleted + 1} ended after ${swipeCount} swipes (${likesCount} likes)`, logger.LOG_LEVELS.SUCCESS, 'SESSION');
+            logger.log(`Session duration: ${Math.round((Date.now() - sessionStartTime) / 60000)} minutes`, logger.LOG_LEVELS.INFO, 'SESSION');
             
-            // Simulate a real user checking the profile
-            await simulateProfileCheck(page);
+            // Save session state
+            await saveSession(page);
             
-            // Process the profile based on the extracted information and preferences
-            const swipeDirection = await processProfile(page, buttonPositions, isPhotoVerified, profileInfo, userPreferences);
+            totalSessionsCompleted++;
             
-            // Update stats if we swiped right
-            if (swipeDirection === 'right') {
-                likesCount++;
-                
-                // After liking, check for match notification and handle it
-                logger.log('Checking for match notification...', logger.LOG_LEVELS.INFO, 'MATCH');
-                await handleMatchNotification(page);
-            }
+            // Take a longer rest between sessions (30-60 minutes)
+            const betweenSessionRestMinutes = Math.floor(Math.random() * 30) + 30;
+            logger.section('Extended Rest Period');
+            logger.log(`Taking an extended break between sessions for ${betweenSessionRestMinutes} minutes...`, 
+                      logger.LOG_LEVELS.INFO, 'REST');
+            logger.log(`Next session (#${totalSessionsCompleted + 1}) will start at ${new Date(Date.now() + betweenSessionRestMinutes * 60 * 1000).toLocaleTimeString()}`, 
+                      logger.LOG_LEVELS.INFO, 'REST');
             
-            // Every 8-12 profiles, save the session to mimic browser behavior
-            const sessionSaveFrequency = Math.floor(Math.random() * 
-                (config.swiping.session.sessionSaveFrequency.max - config.swiping.session.sessionSaveFrequency.min + 1)) 
-                + config.swiping.session.sessionSaveFrequency.min;
-                
-            if (swipeCount % sessionSaveFrequency === 0) {
-                await saveSession(page);
-            }
+            // Save session before extended rest
+            await saveSession(page);
             
-            // Add random delay between swipes with configurable timing
-            const shortDelayProb = config.swiping.delays.betweenProfiles.shortDelayProbability;
+            // Wait for the extended rest duration
+            await delay(betweenSessionRestMinutes * 60 * 1000);
             
-            // Use a non-uniform distribution based on config probabilities
-            let waitTime;
-            if (Math.random() < shortDelayProb) {
-                // Short delay case
-                const shortDelayMin = config.swiping.delays.betweenProfiles.shortDelay.min;
-                const shortDelayRange = config.swiping.delays.betweenProfiles.shortDelay.max - shortDelayMin;
-                waitTime = Math.random() * shortDelayRange + shortDelayMin;
-            } else {
-                // Long delay case
-                const longDelayMin = config.swiping.delays.betweenProfiles.longDelay.min;
-                const longDelayRange = config.swiping.delays.betweenProfiles.longDelay.max - longDelayMin;
-                waitTime = Math.random() * longDelayRange + longDelayMin;
-            }
-            
-            await delay(waitTime);
-            
-            // Every X swipes, display statistics
-            if (swipeCount % config.swiping.session.statsDisplayFrequency === 0) {
-                logger.displayStats(swipeCount, likesCount);
-                
-                // Calculate and log session metrics
-                const elapsedMinutes = Math.round((Date.now() - sessionStartTime) / 60000);
-                const remainingSwipes = maxSwipes - swipeCount;
-                const remainingMinutes = Math.round((maxSessionTime - (Date.now() - sessionStartTime)) / 60000);
-                
-                logger.log(`Session progress: ${elapsedMinutes} minutes elapsed, ${remainingMinutes} minutes remaining`, 
-                          logger.LOG_LEVELS.INFO, 'SESSION');
-                logger.log(`Swipe progress: ${swipeCount}/${maxSwipes} (${remainingSwipes} remaining)`, 
-                          logger.LOG_LEVELS.INFO, 'SESSION');
-            }
-            
-            // Implement rest periods to simulate natural usage patterns
-            // Track the time spent swiping
-            if (!global.swipeStartTime) {
-                global.swipeStartTime = Date.now();
-                global.lastRestTime = Date.now();
-            }
-            
-            // Check if it's time for a rest period
-            const minutesSinceLastRest = (Date.now() - global.lastRestTime) / (1000 * 60);
-            
-            // More random rest frequency from config
-            const restFrequency = Math.floor(Math.random() * 
-                (config.swiping.restPeriods.frequency.max - config.swiping.restPeriods.frequency.min + 1)) 
-                + config.swiping.restPeriods.frequency.min;
-            
-            if (minutesSinceLastRest >= restFrequency) {
-                // Time for a rest period
-                // More random duration from config
-                const restDuration = Math.floor(Math.random() * 
-                    (config.swiping.restPeriods.duration.max - config.swiping.restPeriods.duration.min + 1)) 
-                    + config.swiping.restPeriods.duration.min;
-                
-                logger.section('Rest Period');
-                logger.log(`Taking a break for ${restDuration} minutes to simulate natural behavior.`, 
-                          logger.LOG_LEVELS.INFO, 'REST');
-                logger.log(`Will resume swiping at ${new Date(Date.now() + restDuration * 60 * 1000).toLocaleTimeString()}`, 
-                          logger.LOG_LEVELS.INFO, 'REST');
-                
-                // Save session before taking a break
-                await saveSession(page);
-                
-                // Wait for the rest duration
-                await delay(restDuration * 60 * 1000);
-                
-                // Update last rest time
-                global.lastRestTime = Date.now();
-                
-                logger.section('Resuming Activity');
-                logger.log(`Rest period complete. Resuming swiping...`, logger.LOG_LEVELS.SUCCESS, 'REST');
-            }
+            logger.section('Starting New Session');
+            logger.log(`Extended rest period complete. Starting session #${totalSessionsCompleted + 1}...`, 
+                      logger.LOG_LEVELS.SUCCESS, 'REST');
         }
-        
-        logger.section('Session Complete');
-        logger.log(`Session ended after ${swipeCount} swipes (${likesCount} likes)`, logger.LOG_LEVELS.SUCCESS, 'SESSION');
-        logger.log(`Session duration: ${Math.round((Date.now() - sessionStartTime) / 60000)} minutes`, logger.LOG_LEVELS.INFO, 'SESSION');
-        
-        // Save final session
-        await saveSession(page);
         
     } catch (error) {
         logger.log(`An error occurred: ${error.message}`, logger.LOG_LEVELS.ERROR, 'SYSTEM');
