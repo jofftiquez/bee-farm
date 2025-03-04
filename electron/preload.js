@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('stop-automation');
   },
   
+  // Testing
+  testProfile: async () => {
+    return await ipcRenderer.invoke('test-profile');
+  },
+  
   // Events
   onLog: (callback) => {
     ipcRenderer.on('log', (event, data) => callback(data));
@@ -40,6 +45,10 @@ contextBridge.exposeInMainWorld('api', {
   onProfileAnalyzed: (callback) => {
     ipcRenderer.on('profile-analyzed', (event, data) => callback(data));
     return () => ipcRenderer.removeListener('profile-analyzed', callback);
+  },
+  onAnalysisStatus: (callback) => {
+    ipcRenderer.on('analysis-status', (event, data) => callback(data));
+    return () => ipcRenderer.removeListener('analysis-status', callback);
   },
   onStatusChanged: (callback) => {
     ipcRenderer.on('status-changed', (event, data) => callback(data));

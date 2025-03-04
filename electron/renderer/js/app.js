@@ -24,16 +24,43 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // Initialize modules
-        window.configModule.initializeConfigListeners();
-        window.logsModule.initializeLogging();
-        window.profileModule.initializeProfile();
-        window.analysisModule.initializeAnalysis();
+        console.log('Initializing application modules...');
+        
+        // Initialize modules with order and error handling
+        if (window.configModule && typeof window.configModule.initializeConfigListeners === 'function') {
+            window.configModule.initializeConfigListeners();
+            console.log('Config module initialized');
+        } else {
+            console.error('Failed to initialize config module');
+        }
+        
+        if (window.logsModule && typeof window.logsModule.initializeLogging === 'function') {
+            window.logsModule.initializeLogging();
+            console.log('Logs module initialized');
+        } else {
+            console.error('Failed to initialize logs module');
+        }
+        
+        if (window.profileModule && typeof window.profileModule.initializeProfile === 'function') {
+            window.profileModule.initializeProfile();
+            console.log('Profile module initialized');
+        } else {
+            console.error('Failed to initialize profile module');
+        }
+        
+        if (window.analysisModule && typeof window.analysisModule.initializeAnalysis === 'function') {
+            window.analysisModule.initializeAnalysis();
+            console.log('Analysis module initialized');
+        } else {
+            console.error('Failed to initialize analysis module');
+        }
         
         // Load configuration
+        console.log('Loading configuration...');
         await loadConfiguration();
         
         // Set up event listeners
+        console.log('Setting up event listeners...');
         setupEventListeners();
         
         // Set up status listener
@@ -306,6 +333,46 @@ function setupEventListeners() {
     
     // Stop button
     document.getElementById('stopButton').addEventListener('click', stopAutomation);
+    
+    // Test Profile button
+    const testProfileBtn = document.getElementById('testProfile');
+    if (testProfileBtn) {
+        testProfileBtn.addEventListener('click', () => {
+            window.logsModule.log('Testing profile display...', 'info', 'DEBUG');
+            if (window.api && typeof window.api.testProfile === 'function') {
+                window.api.testProfile();
+            } else {
+                // Fallback for testing without API
+                const mockProfile = {
+                    name: 'Test User',
+                    age: 30,
+                    hasBio: true,
+                    bio: 'This is a test profile to check display functionality.',
+                    attributes: ['Testing', 'Debug', 'Profile Display'],
+                    isVerified: true,
+                    analysis: {
+                        alignmentScore: 0.85,
+                        keywordMatches: ['Testing', 'Debug'],
+                        llm: {
+                            analysis: 'This is a test LLM analysis to verify that the LLM results are displayed properly in the UI.',
+                            score: 0.9
+                        },
+                        decision: 'like',
+                        reason: 'This is a test reason for the decision.'
+                    }
+                };
+                
+                if (window.profileModule && typeof window.profileModule.displayProfile === 'function') {
+                    window.profileModule.displayProfile(mockProfile);
+                }
+                
+                // Also directly call the analysis display in case that's not happening automatically
+                if (window.analysisModule && typeof window.analysisModule.displayAnalysis === 'function' && mockProfile.analysis) {
+                    window.analysisModule.displayAnalysis(mockProfile.analysis);
+                }
+            }
+        });
+    }
 }
 
 // Export app functions if needed

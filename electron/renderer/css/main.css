@@ -494,4 +494,48 @@ body, html {
 
 .small-button:hover {
     background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Analysis loading state */
+.analysis-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 2rem;
+    text-align: center;
+    color: var(--secondary-text-color);
+}
+
+.analysis-loading i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+.loading-progress {
+    width: 80%;
+    height: 0.5rem;
+    background-color: var(--background-color-light);
+    border-radius: 0.25rem;
+    margin-top: 1rem;
+    overflow: hidden;
+}
+
+.loading-bar {
+    height: 100%;
+    width: 0%;
+    background-color: var(--primary-color);
+    border-radius: 0.25rem;
+    animation: loading-animation 2s infinite alternate;
+}
+
+@keyframes loading-animation {
+    0% {
+        width: 10%;
+    }
+    100% {
+        width: 90%;
+    }
 } 

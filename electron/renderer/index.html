@@ -42,6 +42,10 @@
                     <i class="fas fa-list-ul"></i>
                     <span>Logs</span>
                 </button>
+                <button id="testProfile" class="toolbar-button" title="Test Profile Display">
+                    <i class="fas fa-vial"></i>
+                    <span>Test Profile</span>
+                </button>
             </div>
         </div>
 
@@ -146,7 +150,11 @@
                         
                         <div class="profile-container" style="display: none;">
                             <div class="profile-header">
-                                <h3 id="profileName">Name, <span id="profileAge">Age</span></h3>
+                                <h3>
+                                    <span id="profileName">Name</span>
+                                    <span class="profile-age-separator">, </span>
+                                    <span id="profileAge">Age</span>
+                                </h3>
                             </div>
                             <div class="profile-body">
                                 <div class="profile-section">
@@ -175,6 +183,14 @@
                         <div class="analysis-placeholder">
                             <i class="fas fa-chart-bar"></i>
                             <p>No analysis available</p>
+                        </div>
+                        
+                        <div class="analysis-loading" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Analyzing profile...</p>
+                            <div class="loading-progress">
+                                <div class="loading-bar"></div>
+                            </div>
                         </div>
                         
                         <div class="analysis-container" style="display: none;">

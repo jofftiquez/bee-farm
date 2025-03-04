@@ -6,7 +6,7 @@ const os = require('os');
 const axios = require('axios');
 
 // Require core modules
-let logger, profileAnalysis, config, llmIntegration, browser, swipeLogic, session, utils, cleanup;
+let logger, profileAnalysis, config, llmIntegration, browser, swipeLogic, session, utils, cleanup, antiDetection;
 try {
   logger = require('../lib/logger');
   profileAnalysis = require('../lib/profile-analysis');
@@ -17,6 +17,7 @@ try {
   session = require('../lib/session');
   utils = require('../lib/utils');
   cleanup = require('../lib/cleanup');
+  antiDetection = require('../lib/anti-detection');
 } catch (error) {
   console.error('Failed to import core modules:', error);
 }
@@ -72,6 +73,12 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   
+  // For debugging - Send mock profile data to test UI display after a short delay
+  setTimeout(() => {
+    sendMockProfileData();
+    sendLogToUI('Sent mock profile data for testing UI display', 'info', 'DEBUG');
+  }, 1500);
+
   // Check LLM connection when app starts
   if (llmIntegration && llmIntegration.checkLlamaApiConnection) {
     // Load user preferences first
@@ -352,14 +359,32 @@ async function startBrowserAutomation() {
   sendLogToUI('Initializing browser...', 'info', 'BROWSER');
   
   try {
-    // Initialize the browser
+    // Initialize the browser with more human-like parameters
     const result = await browser.initBrowser({
       headless: false,  // Always use headed mode in UI
-      slowMo: Math.floor(Math.random() * 10) + 5
+      slowMo: Math.floor(Math.random() * 15) + 10, // Slightly slower to appear more human-like
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=IsolateOrigins,site-per-process',
+        `--window-size=${Math.floor(Math.random() * 200) + 1024},${Math.floor(Math.random() * 200) + 768}`
+      ]
     });
     
     browserInstance = result.browser;
     page = result.page;
+    
+    // Apply anti-detection measures
+    if (antiDetection && typeof antiDetection.applyEvasions === 'function') {
+      sendLogToUI('Applying anti-detection measures...', 'info', 'SECURITY');
+      await antiDetection.applyEvasions(page);
+      await antiDetection.applyRandomBehavior(page);
+      
+      // Start human presence simulation
+      const stopHumanSimulation = antiDetection.simulateHumanPresence(page);
+      
+      // Store the stop function to use when closing the browser
+      app.stopHumanSimulation = stopHumanSimulation;
+    }
     
     // Set up session saving
     if (session && session.scheduleSessionSaving) {
@@ -432,7 +457,49 @@ async function startSwipingProcess(page) {
             
             // Send profile to UI
             if (profileInfo) {
-              mainWindow.webContents.send('profile-analyzed', profileInfo);
+              // Send profile without analysis first
+              const profileWithoutAnalysis = { ...profileInfo };
+              delete profileWithoutAnalysis.analysis; // Remove analysis if it exists
+              
+              // Send the profile data to UI
+              mainWindow.webContents.send('profile-analyzed', profileWithoutAnalysis);
+              
+              // Notify that analysis is starting
+              mainWindow.webContents.send('analysis-status', { 
+                status: 'started',
+                profileId: profileInfo.name || 'Unknown Profile'
+              });
+              
+              // Get user preferences for analysis
+              try {
+                // Get user preferences - using proper method from config module
+                const userPreferences = await config.getPreferences();
+                
+                // Analyze profile alignment with user preferences
+                const analysisResult = await profileAnalysis.analyzeProfileAlignment(profileInfo, userPreferences);
+                
+                // Add analysis to the profile info
+                profileInfo.analysis = analysisResult;
+                
+                // Send updated profile with analysis to UI
+                mainWindow.webContents.send('profile-analyzed', profileInfo);
+                
+                // Also send separate analysis status update
+                mainWindow.webContents.send('analysis-status', {
+                  status: 'completed',
+                  profileId: profileInfo.name || 'Unknown Profile',
+                  analysis: analysisResult
+                });
+              } catch (analysisError) {
+                sendLogToUI(`Error analyzing profile: ${analysisError.message}`, 'error', 'ANALYSIS');
+                
+                // Send analysis error to UI
+                mainWindow.webContents.send('analysis-status', {
+                  status: 'error',
+                  profileId: profileInfo.name || 'Unknown Profile',
+                  error: analysisError.message
+                });
+              }
             } else {
               sendLogToUI('Could not extract profile info', 'warning', 'PROFILE');
             }
@@ -450,6 +517,14 @@ async function startSwipingProcess(page) {
         
         try {
           if (swipeLogic && swipeLogic.processProfile && profileInfo) {
+            // Debug user preferences
+            sendLogToUI(`DEBUG: User preferences before swipe: ${JSON.stringify({
+              hasPrefs: !!userPreferences,
+              type: typeof userPreferences,
+              llmEnabled: userPreferences?.llmSettings?.enabled,
+              interests: userPreferences?.interests?.length || 0
+            })}`, 'debug', 'CONFIG');
+            
             // Double-check user preferences are available
             if (!userPreferences || typeof userPreferences !== 'object') {
               userPreferences = {
@@ -458,10 +533,18 @@ async function startSwipingProcess(page) {
                 avoidKeywords: [],
                 requireBio: true,
                 alignmentThreshold: 0.3,
-                llmSettings: { enabled: false, minComparisonScore: 0.5 }
+                llmSettings: { enabled: true, minComparisonScore: 0.5 }
               };
-              sendLogToUI('Using fallback user preferences', 'warning', 'CONFIG');
+              sendLogToUI('Using fallback user preferences with LLM enabled', 'warning', 'CONFIG');
             }
+            
+            // Additional debug after potential fallback
+            sendLogToUI(`DEBUG: User preferences after check: ${JSON.stringify({
+              hasPrefs: !!userPreferences,
+              type: typeof userPreferences,
+              llmEnabled: userPreferences?.llmSettings?.enabled,
+              interests: userPreferences?.interests?.length || 0
+            })}`, 'debug', 'CONFIG');
             
             const result = await swipeLogic.processProfile(page, profileInfo, userPreferences);
             decision = result.decision;
@@ -586,6 +669,17 @@ async function stopAutomation() {
   
   isAutomationRunning = false;
   
+  // Stop human presence simulation if active
+  if (app.stopHumanSimulation && typeof app.stopHumanSimulation === 'function') {
+    try {
+      app.stopHumanSimulation();
+      sendLogToUI('Human simulation stopped', 'debug', 'CLEANUP');
+      app.stopHumanSimulation = null;
+    } catch (error) {
+      sendLogToUI(`Error stopping human simulation: ${error.message}`, 'error', 'CLEANUP');
+    }
+  }
+  
   // Cancel the session saving interval if it exists
   if (clearSessionInterval) {
     clearSessionInterval();
@@ -657,24 +751,63 @@ if (logger) {
 
 // Function to send mock profile data (for testing)
 function sendMockProfileData() {
-  const mockProfile = {
+  console.log('Sending mock profile data to renderer');
+  
+  // First send profile without analysis to show loading state
+  const mockProfileBasic = {
     name: 'Jane',
     age: 28,
     hasBio: true,
-    bio: 'Software engineer by day, rock climber by night. Coffee enthusiast and anime lover. ENTP.',
-    attributes: ['Coffee', 'Rock Climbing', 'Anime', 'ENTP', 'Software Engineering'],
-    isVerified: true,
-    analysis: {
-      alignmentScore: 0.75,
-      keywordMatches: ['Coffee', 'Rock Climbing', 'Anime', 'ENTP'],
-      llm: {
-        analysis: 'High compatibility based on shared interests in rock climbing, coffee, and anime. Both have technical backgrounds and similar personality types.',
-        score: 0.8
-      },
-      decision: 'like',
-      reason: 'Strong alignment on multiple interests, verified profile, and positive LLM analysis.'
-    }
+    bio: 'Software engineer by day, rock climber by night. Coffee enthusiast and anime lover. ENTP personality type. Love to travel and explore new places on weekends.',
+    attributes: ['Coffee', 'Rock Climbing', 'Anime', 'ENTP', 'Software Engineering', 'Travel'],
+    isVerified: true
   };
   
-  mainWindow.webContents.send('profile-analyzed', mockProfile);
-} 
+  // Send to renderer
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('profile-analyzed', mockProfileBasic);
+    mainWindow.webContents.send('analysis-status', { 
+      status: 'started',
+      profileId: mockProfileBasic.name
+    });
+    
+    // Simulate analysis delay
+    setTimeout(() => {
+      // Complete mock profile with analysis
+      const mockProfileComplete = {
+        ...mockProfileBasic,
+        analysis: {
+          alignmentScore: 0.75,
+          keywordMatches: ['Coffee', 'Rock Climbing', 'Anime', 'ENTP'],
+          llm: {
+            analysis: 'High compatibility based on shared interests in rock climbing, coffee, and anime. Both have technical backgrounds and similar personality types. The travel interest also aligns with your outdoor activities preferences.',
+            score: 0.8
+          },
+          decision: 'like',
+          reason: 'Strong alignment on multiple interests, verified profile, and positive LLM analysis.'
+        }
+      };
+      
+      // Send completed analysis
+      mainWindow.webContents.send('profile-analyzed', mockProfileComplete);
+      mainWindow.webContents.send('analysis-status', {
+        status: 'completed',
+        profileId: mockProfileComplete.name,
+        analysis: mockProfileComplete.analysis
+      });
+      
+      sendLogToUI('Mock profile analysis completed', 'success', 'ANALYSIS');
+    }, 2500); // 2.5 second delay to show loading state
+    
+    sendLogToUI('Sent mock profile data to renderer', 'info', 'DEBUG');
+  } else {
+    console.error('Cannot send mock profile - mainWindow not available');
+  }
+}
+
+// Add handler for test-profile
+ipcMain.handle('test-profile', async () => {
+  sendLogToUI('Test profile requested from renderer', 'info', 'DEBUG');
+  sendMockProfileData();
+  return { success: true };
+}); 
