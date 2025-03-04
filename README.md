@@ -8,6 +8,10 @@ This project provides a Puppeteer-based automation script for Bumble with advanc
 - **Smart Swiping**: Makes decisions based on user preferences and profile content
 - **Session Persistence**: Maintains login sessions between runs with cookie management
 - **Enhanced Logging**: Clear, color-coded logs with structured data presentation
+- **LLM Integration**: Optional Llama 3 integration for intelligent profile compatibility analysis
+- **Profile Verification Detection**: Automatically detects verified profiles for enhanced filtering
+- **Advanced Session Management**: Scheduled session saving and fingerprint consistency
+- **Natural Browsing Patterns**: Implements rest periods and session limits to simulate human behavior
 
 ## Anti-Detection Measures
 
@@ -22,21 +26,25 @@ This script includes the following measures to avoid bot detection:
    - Randomized mouse movements with realistic acceleration/deceleration
    - Variable click durations and natural profile scrolling
    - Random delays between actions with non-uniform distribution
+   - Implements both short and long delays based on configurable probabilities
 
 3. **Browser Environment Evasions**
    - Spoofed WebGL fingerprinting
    - Realistic plugins and MIME types
    - Modified navigator properties and permissions API behavior
+   - Consistent browser fingerprint between sessions
 
 4. **Session Management**
    - Maintains consistent fingerprinting between sessions
    - Periodically saves cookies during normal operation
    - Simulates browser behavior with regular cookie updates
+   - Scheduled session saving at configurable intervals
 
 5. **Usage Pattern Simulation**
    - Enforces session limits to mimic natural usage (time-based and swipe count)
    - Implements rest periods with random durations
    - Varies interaction patterns to prevent predictability
+   - Implements natural breaks between swipe sessions
 
 ## Setup and Usage
 
@@ -58,12 +66,28 @@ The script uses the following configuration files:
 
 - `user_preferences.json`: Define your preferences for profile matching
 - `session_data/`: Contains session cookies and fingerprinting data
+- `lib/config.js`: Main configuration for timing, session limits, and behavior
 
 ## Advanced Features
 
 - **Profile Verification Checks**: Only swipes right on verified profiles
 - **Bio Analysis**: Checks for keywords to avoid and interests that align with preferences
 - **Match Handling**: Automatically handles match popups when they appear
+- **Age and Location Preferences**: Filter profiles based on age range and location preferences
+- **LLM-Powered Analysis**: Optional Llama 3 integration for intelligent profile compatibility scoring
+- **Natural Rest Periods**: Implements randomized activity and rest cycles
+- **Extended Session Management**: Manages multiple swipe sessions with longer breaks between
+
+## LLM Integration
+
+The script now includes optional integration with Llama 3 for advanced profile compatibility analysis:
+
+- Connect to local Llama 3 instance via Ollama or other LLM servers
+- Analyze profiles based on deeper contextual understanding
+- Get compatibility scores and detailed analyses for potential matches
+- Override simple keyword matching with AI-powered compatibility detection
+
+See `llm-integration-readme.md` for setup instructions.
 
 ## Customization
 
@@ -71,6 +95,7 @@ You can modify the following aspects:
 - Swiping criteria in `lib/swipe-logic.js`
 - Anti-detection settings in `lib/anti-detection.js`
 - Browser configuration in `lib/browser.js`
+- LLM settings in user preferences
 
 ## Notes
 
@@ -100,12 +125,17 @@ Use at your own risk. The authors and contributors of this code are not responsi
 - Automatic cleanup of temporary files
 - Natural rest periods (15-20 minute activity followed by 5-10 minute breaks)
 - Automatic match notification handling (dismisses "Continue Bumbling" dialogs)
+- Randomized session lengths to avoid predictable usage patterns
+- Enhanced profile verification detection using multiple methods
+- Age and location-based profile filtering
+- Support for LLM-based profile compatibility analysis
 
 ## 📋 Requirements
 
 - Node.js (v14 or higher recommended)
 - npm or pnpm
 - A Bumble account
+- (Optional) Ollama with Llama 3 for LLM integration
 
 ## 🔧 Installation
 
@@ -131,7 +161,8 @@ node index.js
 4. The script will automatically detect the like/pass buttons
 5. You can test the detected button positions
 6. Configure the like percentage (default is 18% based on Elo optimization)
-7. The script will begin automatically swiping based on your settings
+7. Enable additional features like LLM analysis and age/location preferences
+8. The script will begin automatically swiping based on your settings
 
 ## 📝 How It Works
 
@@ -141,7 +172,8 @@ node index.js
 
 2. **Profile Interaction**: For each profile, the script:
    - Scrolls through profile content (random number of up/down actions)
-   - Makes a decision based on configured probability
+   - Extracts and analyzes profile information (bio, interests, verification status)
+   - Makes a decision based on configured probability and profile analysis
    - Clicks the appropriate button
    - Adds random delays between actions
 
@@ -160,7 +192,19 @@ node index.js
    - Automatically resumes after each rest period
    - Helps simulate natural human behavior and reduce detection risk
 
-6. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
+6. **Session Management**: The script implements multi-session swiping:
+   - Limits each session to a random number of swipes (configurable)
+   - Takes extended breaks between sessions (30-60 minutes)
+   - Maintains consistent fingerprinting between sessions
+   - Periodically saves cookies to mimic browser behavior
+
+7. **LLM Analysis**: When enabled, the script:
+   - Sends profile data to Llama 3 for intelligent compatibility analysis
+   - Receives a detailed compatibility report and score
+   - Uses this information to make more nuanced swiping decisions
+   - Provides human-readable explanations for compatibility decisions
+
+8. **Termination**: Press Ctrl+C at any time to safely exit the script and clean up resources.
 
 ## 🧮 The Math Behind the Algorithm
 
@@ -219,6 +263,8 @@ The script implements this ratio while adding randomness to avoid pattern detect
 ## 🛠️ Customization
 
 - Adjust the like probability when prompted (optimized default is 18%)
+- Configure age and location preferences for more targeted matching
+- Enable or disable LLM analysis for deeper profile compatibility assessment
 - Modify delays in the code to speed up or slow down the automation
 - Update the page.goto URL if you want to use a different entry point
 
@@ -228,6 +274,11 @@ If button detection fails:
 1. The script will fall back to manual coordinate entry
 2. Check if Bumble has updated their UI or HTML structure
 3. Use the test functionality to confirm button positions work
+
+For LLM integration issues:
+1. Check if Ollama or your LLM server is running
+2. Verify the model name and endpoint configuration
+3. See llm-integration-readme.md for detailed setup instructions
 
 ## ⚠️ Caveats
 
@@ -248,15 +299,8 @@ The script includes a robust session management system to maintain your login be
 
 - **Cookie-based Authentication**: The script saves and reuses session cookies to avoid logging in each time
 - **Login Detection**: Automatically determines if you're already logged in or need to authenticate
-- **Session Directory**: Stores authentication data in the `session_data/` folder - do not delete this!
-- **Backup Mechanism**: Creates backup copies of critical authentication cookies
-- **Periodic Updates**: Refreshes session data every 5 minutes to maintain authenticity
-- **First-Run Process**: On first use, you'll need to log in manually - the script will save your session for future runs
-
-If you experience authentication issues:
-1. Make sure `session_data/` exists and contains cookie files
-2. Try clearing the session data and logging in fresh if cookies expire
-3. Check that your account hasn't been flagged by Bumble security systems
+- **Fingerprint Consistency**: Maintains the same browser fingerprint between sessions to avoid detection
+- **Scheduled Session Saving**: Automatically saves session state at configurable intervals
 
 ## 📜 License
 
