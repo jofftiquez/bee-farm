@@ -4,6 +4,7 @@
 		"puppeteer": "^24.3.0",
 		"puppeteer-extra": "^3.3.6",
 		"puppeteer-extra-plugin-anonymize-ua": "^2.4.6",
-		"puppeteer-extra-plugin-stealth": "^2.11.2"
+		"puppeteer-extra-plugin-stealth": "^2.11.2",
+		"axios": "^1.6.7"
 	}
 }

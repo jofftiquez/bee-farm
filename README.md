@@ -98,7 +98,6 @@ Use at your own risk. The authors and contributors of this code are not responsi
 - Dynamic ratio adjustment to maintain optimal scoring
 - Configurable like/pass ratio with built-in pattern randomization
 - Automatic cleanup of temporary files
-- Screenshot-assisted troubleshooting
 - Natural rest periods (15-20 minute activity followed by 5-10 minute breaks)
 - Automatic match notification handling (dismisses "Continue Bumbling" dialogs)
 
@@ -222,10 +221,6 @@ The script implements this ratio while adding randomness to avoid pattern detect
 - Adjust the like probability when prompted (optimized default is 18%)
 - Modify delays in the code to speed up or slow down the automation
 - Update the page.goto URL if you want to use a different entry point
-
-## 📷 Screenshots
-
-The script takes a temporary screenshot during setup to assist with button detection, which is automatically deleted when the script terminates.
 
 ## ⚠️ Troubleshooting
 

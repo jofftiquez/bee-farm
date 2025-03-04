@@ -32,8 +32,21 @@ async function cleanup() {
     // Save the session before closing
     if (browser && browser.page) {
         try {
+            // Ensure we save both normal and all cookies
             await saveSession(browser.page);
             logger.log('Final session state saved', logger.LOG_LEVELS.SUCCESS, 'CLEANUP');
+            
+            // Additional check - verify that cookies are saved properly
+            try {
+                const cookies = await browser.page.cookies();
+                if (cookies && cookies.length > 0) {
+                    logger.log(`Verified ${cookies.length} cookies before closing`, logger.LOG_LEVELS.DEBUG, 'CLEANUP');
+                } else {
+                    logger.log('Warning: No cookies found to save', logger.LOG_LEVELS.WARNING, 'CLEANUP');
+                }
+            } catch (cookieError) {
+                logger.log(`Cookie verification error: ${cookieError.message}`, logger.LOG_LEVELS.ERROR, 'CLEANUP');
+            }
         } catch (error) {
             logger.log(`Error saving final session: ${error.message}`, logger.LOG_LEVELS.ERROR, 'CLEANUP');
         }
@@ -61,16 +74,186 @@ async function cleanup() {
     try {
         logger.section('Startup');
         
-        // Create screenshots directory
-        const screenshotDir = path.join(process.cwd(), 'screenshots');
-        await ensureDirectoryExists(screenshotDir);
-        logger.log(`Screenshots directory: ${screenshotDir}`, logger.LOG_LEVELS.INFO, 'SETUP');
+        // No longer creating screenshots directory for privacy reasons
         
         // Path for user preferences file
         const preferencesFilePath = path.join(process.cwd(), 'user_preferences.json');
         
         // Load user preferences or prompt user to create them
         userPreferences = await loadUserPreferences(preferencesFilePath);
+        
+        // Ask for the swipe right percentage and verified profile requirement 
+        // every time the script runs, even if preferences file already exists
+        logger.section('Session Settings');
+        
+        // Ask about requiring verified profiles
+        const requireVerifiedPrompt = await question(
+            `Only swipe right on verified profiles? (Y/n, current: ${userPreferences.requireVerified ? 'YES' : 'NO'}): `
+        );
+        if (requireVerifiedPrompt.trim() !== '') {
+            userPreferences.requireVerified = requireVerifiedPrompt.toLowerCase() !== 'n';
+            logger.log(`Verified profiles requirement updated to: ${userPreferences.requireVerified ? 'YES' : 'NO'}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+        }
+        
+        // Ask for the swipe right percentage (using config default)
+        const currentSwipeRight = userPreferences.swipeRightPercentage || config.swiping.defaultSwipeRightPercentage;
+        const swipeRightPrompt = await question(
+            `Enter swipe right percentage (1-100, current: ${currentSwipeRight}%, default: ${config.swiping.defaultSwipeRightPercentage}%): `
+        );
+        if (swipeRightPrompt.trim() !== '') {
+            const swipeRightPercentage = parseInt(swipeRightPrompt, 10);
+            if (!isNaN(swipeRightPercentage) && swipeRightPercentage >= 1 && swipeRightPercentage <= 100) {
+                userPreferences.swipeRightPercentage = swipeRightPercentage;
+                logger.log(`Swipe right percentage updated to: ${swipeRightPercentage}%`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+            } else {
+                logger.log(`Invalid swipe right percentage, keeping current value: ${currentSwipeRight}%`, logger.LOG_LEVELS.WARNING, 'SETTINGS');
+            }
+        } else {
+            logger.log(`Using swipe right percentage: ${currentSwipeRight}%`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+        }
+        
+        // Ask if the user wants to use LLM mode
+        if (!userPreferences.llmSettings) {
+            userPreferences.llmSettings = {
+                enabled: false,
+                minComparisonScore: 0.6
+            };
+        }
+        
+        const currentLlmEnabled = userPreferences.llmSettings.enabled;
+        const useLlmPrompt = await question(
+            `Use Llama 3 for advanced profile compatibility analysis? (y/N, current: ${currentLlmEnabled ? 'YES' : 'NO'}): `
+        );
+        
+        if (useLlmPrompt.trim() !== '') {
+            userPreferences.llmSettings.enabled = useLlmPrompt.toLowerCase() === 'y';
+            logger.log(`Llama 3 analysis ${userPreferences.llmSettings.enabled ? 'ENABLED' : 'DISABLED'}`, 
+                userPreferences.llmSettings.enabled ? logger.LOG_LEVELS.SUCCESS : logger.LOG_LEVELS.INFO, 
+                'SETTINGS');
+            
+            // If enabled, ask for the minimum comparison score
+            if (userPreferences.llmSettings.enabled) {
+                const currentMinScore = userPreferences.llmSettings.minComparisonScore;
+                const minScorePrompt = await question(
+                    `Enter minimum LLM compatibility score (0.0-1.0, current: ${currentMinScore}): `
+                );
+                
+                if (minScorePrompt.trim() !== '') {
+                    const minScore = parseFloat(minScorePrompt);
+                    if (!isNaN(minScore) && minScore >= 0 && minScore <= 1) {
+                        userPreferences.llmSettings.minComparisonScore = minScore;
+                        logger.log(`Minimum LLM score updated to: ${minScore}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+                    }
+                }
+                
+                // Verify if Llama is accessible
+                logger.log('Verifying Llama 3 API connection...', logger.LOG_LEVELS.INFO, 'SETTINGS');
+                try {
+                    const llmIntegration = require('./lib/llm-integration');
+                    const isConnected = await llmIntegration.checkLlamaApiConnection();
+                    
+                    if (isConnected) {
+                        logger.log('Llama API connection successful ✅', logger.LOG_LEVELS.SUCCESS, 'SETTINGS');
+                    } else {
+                        logger.log('Warning: Could not connect to Llama API', logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                        logger.log('LLM analysis will be skipped if connection is not available during runtime', logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                        logger.log('See llm-integration-readme.md for setup instructions', logger.LOG_LEVELS.INFO, 'SETTINGS');
+                    }
+                } catch (error) {
+                    logger.log(`Warning: Error checking Llama API: ${error.message}`, logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                    logger.log('LLM analysis will be skipped if connection is not available during runtime', logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                    logger.log('See llm-integration-readme.md for setup instructions', logger.LOG_LEVELS.INFO, 'SETTINGS');
+                }
+            }
+        }
+        
+        // Ask if age matters for profile matching
+        if (userPreferences.agePreference === undefined) {
+            userPreferences.agePreference = {
+                enabled: false,
+                minAge: 18,
+                maxAge: 45
+            };
+        }
+        
+        const ageMattersPrompt = await question(
+            `Does age matter for profile matching? (y/N, current: ${userPreferences.agePreference.enabled ? 'YES' : 'NO'}): `
+        );
+        
+        if (ageMattersPrompt.trim() !== '') {
+            userPreferences.agePreference.enabled = ageMattersPrompt.toLowerCase() === 'y';
+            logger.log(`Age preference ${userPreferences.agePreference.enabled ? 'ENABLED' : 'DISABLED'}`, 
+                userPreferences.agePreference.enabled ? logger.LOG_LEVELS.SUCCESS : logger.LOG_LEVELS.INFO, 
+                'SETTINGS');
+            
+            // If enabled, ask for age range
+            if (userPreferences.agePreference.enabled) {
+                const currentMinAge = userPreferences.agePreference.minAge;
+                const minAgePrompt = await question(
+                    `Enter minimum age (18+, current: ${currentMinAge}): `
+                );
+                
+                if (minAgePrompt.trim() !== '') {
+                    const minAge = parseInt(minAgePrompt, 10);
+                    if (!isNaN(minAge) && minAge >= 18) {
+                        userPreferences.agePreference.minAge = minAge;
+                        logger.log(`Minimum age updated to: ${minAge}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+                    }
+                }
+                
+                const currentMaxAge = userPreferences.agePreference.maxAge;
+                const maxAgePrompt = await question(
+                    `Enter maximum age (current: ${currentMaxAge}): `
+                );
+                
+                if (maxAgePrompt.trim() !== '') {
+                    const maxAge = parseInt(maxAgePrompt, 10);
+                    if (!isNaN(maxAge) && maxAge >= userPreferences.agePreference.minAge) {
+                        userPreferences.agePreference.maxAge = maxAge;
+                        logger.log(`Maximum age updated to: ${maxAge}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+                    }
+                }
+            }
+        }
+        
+        // Ask if location matters for profile matching
+        if (userPreferences.locationPreference === undefined) {
+            userPreferences.locationPreference = {
+                enabled: false,
+                preferredLocations: []
+            };
+        }
+        
+        const locationMattersPrompt = await question(
+            `Does location matter for profile matching? (y/N, current: ${userPreferences.locationPreference.enabled ? 'YES' : 'NO'}): `
+        );
+        
+        if (locationMattersPrompt.trim() !== '') {
+            userPreferences.locationPreference.enabled = locationMattersPrompt.toLowerCase() === 'y';
+            logger.log(`Location preference ${userPreferences.locationPreference.enabled ? 'ENABLED' : 'DISABLED'}`, 
+                userPreferences.locationPreference.enabled ? logger.LOG_LEVELS.SUCCESS : logger.LOG_LEVELS.INFO, 
+                'SETTINGS');
+            
+            // If enabled, ask for preferred locations
+            if (userPreferences.locationPreference.enabled) {
+                const currentLocations = userPreferences.locationPreference.preferredLocations.join(', ') || 'None';
+                const locationsPrompt = await question(
+                    `Enter preferred locations (comma-separated, current: ${currentLocations}): `
+                );
+                
+                if (locationsPrompt.trim() !== '') {
+                    userPreferences.locationPreference.preferredLocations = locationsPrompt
+                        .split(',')
+                        .map(location => location.trim())
+                        .filter(location => location.length > 0);
+                    logger.log(`Preferred locations updated: ${userPreferences.locationPreference.preferredLocations.join(', ')}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+                }
+            }
+        }
+        
+        // Save the updated user preferences
+        await fs.writeFile(preferencesFilePath, JSON.stringify(userPreferences, null, 2));
+        logger.log('User preferences saved.', logger.LOG_LEVELS.SUCCESS, 'SETTINGS');
         
         // Get session fingerprint for more consistent sessions
         const fingerprint = await getSessionFingerprint();
@@ -138,7 +321,7 @@ async function cleanup() {
         await question(randomPrompt);
         
         // Find the action buttons
-        const { buttonPositions, screenshotPath } = await findActionButtons(page, screenshotDir);
+        const { buttonPositions } = await findActionButtons(page);
         
         // Allow user to test the button positions
         logger.section('Button Test');
@@ -197,36 +380,37 @@ async function cleanup() {
                 
                 swipeCount++;
                 
+                // Use a clear section for each profile
                 logger.section(`Profile #${swipeCount}`);
                 
-                // First check if profile is photo verified before doing any profile interactions
-                const isPhotoVerified = await isProfilePhotoVerified(page, screenshotDir);
+                // Extract profile information first to get name and age
+                const profileInfo = await extractProfileInfo(page);
                 
-                // Extract profile information regardless of verification status
-                const profileInfo = await extractProfileInfo(page, screenshotDir);
+                // Check if profile is photo verified
+                const isPhotoVerified = await isProfilePhotoVerified(page);
                 
-                // If not photo verified, immediately swipe left without profile checking
+                // Log verification status but let the swipe logic handle the decision
                 if (!isPhotoVerified) {
-                    logger.log(`Profile is NOT photo verified - Automatically swiping Left (PASS)`, 
-                              logger.LOG_LEVELS.WARNING, 'PROFILE');
-                              
-                    await processProfile(page, buttonPositions, false, profileInfo, userPreferences);
-                    
-                    // Add random delay between swipes with more variability to appear human
-                    const waitTime = Math.random() * 3000 + 800;
-                    await delay(waitTime);
-                    continue; // Skip to next profile
+                    if (userPreferences.requireVerified) {
+                        logger.log(`Profile is NOT photo verified - Will be rejected based on your preference`,
+                                 logger.LOG_LEVELS.WARNING, 'PROFILE');
+                    } else {
+                        logger.log(`Profile is NOT photo verified - but will be analyzed as per your preference`, 
+                                 logger.LOG_LEVELS.INFO, 'PROFILE');
+                    }
+                } else {
+                    logger.log(`Profile IS photo verified`, logger.LOG_LEVELS.SUCCESS, 'PROFILE');
                 }
-                
-                // Profile is verified - proceed with bio analysis
-                logger.log(`Profile IS photo verified - Proceeding with analysis...`, 
-                          logger.LOG_LEVELS.SUCCESS, 'PROFILE');
                 
                 // Simulate a real user checking the profile
                 await simulateProfileCheck(page);
                 
                 // Process the profile based on the extracted information and preferences
+                // The swipe-logic.js will handle the verification preference check
                 const swipeDirection = await processProfile(page, buttonPositions, isPhotoVerified, profileInfo, userPreferences);
+                
+                // Add random delay between swipes with more variability to appear human
+                await delay(Math.random() * 3000 + 800);
                 
                 // Update stats if we swiped right
                 if (swipeDirection === 'right') {
