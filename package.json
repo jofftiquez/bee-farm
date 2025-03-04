@@ -1,10 +1,24 @@
 {
+	"name": "bumble-puppeteer-electron",
+	"version": "1.0.0",
+	"description": "Electron interface for Bumble automation",
+	"main": "electron/main.js",
+	"scripts": {
+		"start": "node index.js",
+		"electron": "electron .",
+		"electron:dev": "NODE_ENV=development electron .",
+		"ui": "node start-electron.js"
+	},
 	"dependencies": {
 		"chalk": "4",
 		"puppeteer": "^24.3.0",
 		"puppeteer-extra": "^3.3.6",
 		"puppeteer-extra-plugin-anonymize-ua": "^2.4.6",
 		"puppeteer-extra-plugin-stealth": "^2.11.2",
-		"axios": "^1.6.7"
+		"axios": "^1.6.7",
+		"electron-store": "^8.1.0"
+	},
+	"devDependencies": {
+		"electron": "^28.2.1"
 	}
 }

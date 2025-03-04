@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bumble Automation</title>
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button id="toggleConfigDrawer" class="toolbar-button">
+                    <i class="fas fa-cog"></i>
+                    <span>Config</span>
+                </button>
+                <button id="startButton" class="toolbar-button">
+                    <i class="fas fa-play"></i>
+                    <span>Start</span>
+                </button>
+                <button id="stopButton" class="toolbar-button" disabled>
+                    <i class="fas fa-stop"></i>
+                    <span>Stop</span>
+                </button>
+            </div>
+            <div class="toolbar-center">
+                <div class="status-indicator">
+                    <span class="status-dot idle"></span>
+                    <span id="statusText">Idle</span>
+                </div>
+                <div class="stats">
+                    <span id="swipeCount">Swipes: 0</span>
+                    <span id="likeCount">Likes: 0</span>
+                    <span id="skipCount">Skips: 0</span>
+                </div>
+            </div>
+            <div class="toolbar-right">
+                <button id="toggleLogsDrawer" class="toolbar-button">
+                    <i class="fas fa-list-ul"></i>
+                    <span>Logs</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main content area -->
+        <div class="content">
+            <!-- Config drawer (left) -->
+            <div class="drawer left-drawer" id="configDrawer">
+                <div class="drawer-header">
+                    <h2>Configuration</h2>
+                    <button id="closeConfigDrawer" class="close-button">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="drawer-content">
+                    <div class="drawer-section">
+                        <h3>User Preferences</h3>
+                        <div class="config-item">
+                            <label for="personalDescription">Personal Description</label>
+                            <textarea id="personalDescription" rows="5"></textarea>
+                        </div>
+                        <div class="config-item">
+                            <label for="interests">Interests (comma separated)</label>
+                            <textarea id="interests" rows="3"></textarea>
+                        </div>
+                        <div class="config-item">
+                            <label for="avoidKeywords">Avoid Keywords (comma separated)</label>
+                            <textarea id="avoidKeywords" rows="2"></textarea>
+                        </div>
+                        <div class="config-item">
+                            <label for="requireBio">
+                                <input type="checkbox" id="requireBio">
+                                Require Bio
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label for="alignmentThreshold">Alignment Threshold</label>
+                            <input type="range" id="alignmentThreshold" min="0" max="1" step="0.1" value="0.3">
+                            <span id="alignmentThresholdValue">0.3</span>
+                        </div>
+                        <div class="config-item">
+                            <label for="swipeRightPercentage">Swipe Right Percentage</label>
+                            <input type="range" id="swipeRightPercentage" min="0" max="100" step="1" value="18">
+                            <span id="swipeRightPercentageValue">18%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="drawer-section">
+                        <h3>LLM Settings</h3>
+                        <div class="config-item">
+                            <label for="llmEnabled">
+                                <input type="checkbox" id="llmEnabled">
+                                Enable LLM Analysis
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label for="llmEndpoint">LLM Endpoint URL</label>
+                            <input type="text" id="llmEndpoint" value="http://localhost:11434/api/generate">
+                        </div>
+                        <div class="config-item">
+                            <label for="minComparisonScore">Minimum Comparison Score</label>
+                            <input type="range" id="minComparisonScore" min="0" max="1" step="0.1" value="0.5">
+                            <span id="minComparisonScoreValue">0.5</span>
+                        </div>
+                    </div>
+                    
+                    <div class="drawer-section">
+                        <h3>Age Preference</h3>
+                        <div class="config-item">
+                            <label for="agePreferenceEnabled">
+                                <input type="checkbox" id="agePreferenceEnabled">
+                                Enable Age Filtering
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label for="minAge">Minimum Age</label>
+                            <input type="number" id="minAge" min="18" max="100" value="18">
+                        </div>
+                        <div class="config-item">
+                            <label for="maxAge">Maximum Age</label>
+                            <input type="number" id="maxAge" min="18" max="100" value="45">
+                        </div>
+                    </div>
+                    
+                    <div class="drawer-footer">
+                        <button id="saveConfig" class="primary-button">Save Configuration</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main content panels -->
+            <div class="content-panels">
+                <!-- Profile panel (left) -->
+                <div class="content-panel profile-panel">
+                    <div class="panel-header">
+                        <h2>Current Profile</h2>
+                    </div>
+                    <div class="panel-content" id="profileContent">
+                        <div class="profile-placeholder">
+                            <i class="fas fa-user-circle"></i>
+                            <p>No profile loaded</p>
+                        </div>
+                        
+                        <div class="profile-container" style="display: none;">
+                            <div class="profile-header">
+                                <h3 id="profileName">Name, <span id="profileAge">Age</span></h3>
+                            </div>
+                            <div class="profile-body">
+                                <div class="profile-section">
+                                    <h4>Bio</h4>
+                                    <p id="profileBio">No bio available</p>
+                                </div>
+                                <div class="profile-section">
+                                    <h4>Interests/Attributes</h4>
+                                    <div id="profileAttributes" class="profile-attributes"></div>
+                                </div>
+                                <div class="profile-section">
+                                    <h4>Verification</h4>
+                                    <p id="profileVerification">Not verified</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Analysis panel (right) -->
+                <div class="content-panel analysis-panel">
+                    <div class="panel-header">
+                        <h2>Profile Analysis</h2>
+                    </div>
+                    <div class="panel-content" id="analysisContent">
+                        <div class="analysis-placeholder">
+                            <i class="fas fa-chart-bar"></i>
+                            <p>No analysis available</p>
+                        </div>
+                        
+                        <div class="analysis-container" style="display: none;">
+                            <div class="analysis-section">
+                                <h3>Alignment Score</h3>
+                                <div class="score-container">
+                                    <div class="score-meter">
+                                        <div id="alignmentScoreFill" class="score-fill"></div>
+                                    </div>
+                                    <div id="alignmentScoreValue" class="score-value">0.0</div>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-section">
+                                <h3>Keyword Matches</h3>
+                                <div id="keywordMatches" class="keyword-matches"></div>
+                            </div>
+                            
+                            <div class="analysis-section">
+                                <h3>LLM Analysis</h3>
+                                <div id="llmAnalysisContainer">
+                                    <p id="llmAnalysis">No LLM analysis available</p>
+                                    <div class="score-container">
+                                        <span>Compatibility Score:</span>
+                                        <div id="llmScoreValue">N/A</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-section">
+                                <h3>Decision</h3>
+                                <div id="decisionContainer" class="decision-container">
+                                    <div id="decision" class="decision">No decision yet</div>
+                                    <div id="decisionReason" class="decision-reason">Waiting for analysis</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Logs drawer (right) -->
+            <div class="drawer right-drawer" id="logsDrawer">
+                <div class="drawer-header">
+                    <h2>System Logs</h2>
+                    <button id="closeLogsDrawer" class="close-button">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="drawer-content">
+                    <div class="log-controls">
+                        <div class="log-filter">
+                            <label for="logLevelFilter">Filter:</label>
+                            <select id="logLevelFilter">
+                                <option value="all">All</option>
+                                <option value="info">Info</option>
+                                <option value="success">Success</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                                <option value="llm">LLM</option>
+                            </select>
+                        </div>
+                        <button id="clearLogs" class="small-button">Clear</button>
+                    </div>
+                    <div id="logsList" class="logs-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/profile.js"></script>
+    <script src="js/analysis.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html> 
