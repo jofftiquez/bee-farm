@@ -1,4 +1,4 @@
-// Main application for Bumble automation with anti-detection measures
+// Main application for Bee Farm - a Bumble Automation with anti-detection measures
 const path = require('path');
 const fs = require('fs').promises;
 
@@ -130,40 +130,44 @@ async function cleanup() {
             logger.log(`Llama 3 analysis ${userPreferences.llmSettings.enabled ? 'ENABLED' : 'DISABLED'}`, 
                 userPreferences.llmSettings.enabled ? logger.LOG_LEVELS.SUCCESS : logger.LOG_LEVELS.INFO, 
                 'SETTINGS');
+        }
+        
+        // Always ask for the minimum comparison score if LLM is enabled
+        if (userPreferences.llmSettings.enabled) {
+            const currentMinScore = userPreferences.llmSettings.minComparisonScore;
+            const minScorePrompt = await question(
+                `Enter minimum LLM compatibility score (0.0-1.0, current: ${currentMinScore}): `
+            );
             
-            // If enabled, ask for the minimum comparison score
-            if (userPreferences.llmSettings.enabled) {
-                const currentMinScore = userPreferences.llmSettings.minComparisonScore;
-                const minScorePrompt = await question(
-                    `Enter minimum LLM compatibility score (0.0-1.0, current: ${currentMinScore}): `
-                );
-                
-                if (minScorePrompt.trim() !== '') {
-                    const minScore = parseFloat(minScorePrompt);
-                    if (!isNaN(minScore) && minScore >= 0 && minScore <= 1) {
-                        userPreferences.llmSettings.minComparisonScore = minScore;
-                        logger.log(`Minimum LLM score updated to: ${minScore}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
-                    }
+            if (minScorePrompt.trim() !== '') {
+                const minScore = parseFloat(minScorePrompt);
+                if (!isNaN(minScore) && minScore >= 0 && minScore <= 1) {
+                    userPreferences.llmSettings.minComparisonScore = minScore;
+                    logger.log(`Minimum LLM score updated to: ${minScore}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+                } else {
+                    logger.log(`Invalid minimum score, keeping current value: ${currentMinScore}`, logger.LOG_LEVELS.WARNING, 'SETTINGS');
                 }
+            } else {
+                logger.log(`Using minimum LLM score: ${currentMinScore}`, logger.LOG_LEVELS.INFO, 'SETTINGS');
+            }
+            
+            // Verify if Llama is accessible
+            logger.log('Verifying Llama 3 API connection...', logger.LOG_LEVELS.INFO, 'SETTINGS');
+            try {
+                const llmIntegration = require('./lib/llm-integration');
+                const isConnected = await llmIntegration.checkLlamaApiConnection();
                 
-                // Verify if Llama is accessible
-                logger.log('Verifying Llama 3 API connection...', logger.LOG_LEVELS.INFO, 'SETTINGS');
-                try {
-                    const llmIntegration = require('./lib/llm-integration');
-                    const isConnected = await llmIntegration.checkLlamaApiConnection();
-                    
-                    if (isConnected) {
-                        logger.log('Llama API connection successful ✅', logger.LOG_LEVELS.SUCCESS, 'SETTINGS');
-                    } else {
-                        logger.log('Warning: Could not connect to Llama API', logger.LOG_LEVELS.WARNING, 'SETTINGS');
-                        logger.log('LLM analysis will be skipped if connection is not available during runtime', logger.LOG_LEVELS.WARNING, 'SETTINGS');
-                        logger.log('See llm-integration-readme.md for setup instructions', logger.LOG_LEVELS.INFO, 'SETTINGS');
-                    }
-                } catch (error) {
-                    logger.log(`Warning: Error checking Llama API: ${error.message}`, logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                if (isConnected) {
+                    logger.log('Llama API connection successful ✅', logger.LOG_LEVELS.SUCCESS, 'SETTINGS');
+                } else {
+                    logger.log('Warning: Could not connect to Llama API', logger.LOG_LEVELS.WARNING, 'SETTINGS');
                     logger.log('LLM analysis will be skipped if connection is not available during runtime', logger.LOG_LEVELS.WARNING, 'SETTINGS');
                     logger.log('See llm-integration-readme.md for setup instructions', logger.LOG_LEVELS.INFO, 'SETTINGS');
                 }
+            } catch (error) {
+                logger.log(`Warning: Error checking Llama API: ${error.message}`, logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                logger.log('LLM analysis will be skipped if connection is not available during runtime', logger.LOG_LEVELS.WARNING, 'SETTINGS');
+                logger.log('See llm-integration-readme.md for setup instructions', logger.LOG_LEVELS.INFO, 'SETTINGS');
             }
         }
         

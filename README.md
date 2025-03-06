@@ -1,10 +1,10 @@
-# Bumble Automation with Anti-Detection Measures
+# 🐝 Bee Farm A Bumble Automation With Anti-Detection Measures
 
 This project provides a Puppeteer-based automation script for Bumble with advanced anti-detection measures to avoid bot detection.
 
 ## Features
 
-- **Profile Analysis**: Analyzes Bumble profiles based on bio text, verification status, and interests
+- **Profile Analysis**: Analyzes Bee Farm profiles based on bio text, verification status, and interests
 - **Smart Swiping**: Makes decisions based on user preferences and profile content
 - **Session Persistence**: Maintains login sessions between runs with cookie management
 - **Enhanced Logging**: Clear, color-coded logs with structured data presentation
@@ -117,7 +117,7 @@ Use at your own risk. The authors and contributors of this code are not responsi
 ## ✨ Features
 
 - Automatically finds and clicks Like/Pass buttons
-- Intelligent button detection using Bumble's data-qa-role attributes
+- Intelligent button detection using Bee Farm's data-qa-role attributes
 - Implements an Elo-optimized swiping algorithm (18% right / 82% left ratio)
 - Simulates natural browsing behavior with random delays and profile scrolling
 - Dynamic ratio adjustment to maintain optimal scoring
@@ -134,7 +134,7 @@ Use at your own risk. The authors and contributors of this code are not responsi
 
 - Node.js (v14 or higher recommended)
 - npm or pnpm
-- A Bumble account
+- A Bee Farm account
 - (Optional) Ollama with Llama 3 for LLM integration
 
 ## 🔧 Installation
@@ -156,7 +156,7 @@ pnpm install
 node index.js
 ```
 
-2. When prompted, log into your Bumble account in the browser window
+2. When prompted, log into your Bee Farm account in the browser window
 3. Navigate to the main swiping interface and press Enter when ready
 4. The script will automatically detect the like/pass buttons
 5. You can test the detected button positions
@@ -166,7 +166,7 @@ node index.js
 
 ## 📝 How It Works
 
-1. **Button Detection**: The script automatically locates buttons using Bumble's data-qa-role attributes:
+1. **Button Detection**: The script automatically locates buttons using Bee Farm's data-qa-role attributes:
    - Like button: `data-qa-role="encounters-action-like"`
    - Pass button: `data-qa-role="encounters-action-dislike"`
 
@@ -310,6 +310,6 @@ MIT
 
 This project uses [Puppeteer](https://pptr.dev/) for browser automation. 
 
-## 🤓 Author
+##  Author
 
 Made with ❤️ by [@jofftiquez](https://github.com/jofftiquez)

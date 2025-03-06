@@ -1,6 +1,6 @@
-# Llama 3 Integration
+# LLM Integration Guide
 
-This document explains how to set up and use the Llama 3 integration for profile compatibility analysis in the Bumble-Puppeteer project.
+This document explains how to set up and use the Llama 3 integration for profile compatibility analysis in the Bee Farm - a Bumble Automation project.
 
 ## Overview
 
